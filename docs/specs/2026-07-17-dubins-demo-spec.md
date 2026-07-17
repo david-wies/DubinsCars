@@ -33,8 +33,8 @@ them.
 - **FR-2** User can toggle heading convention (angle/azimuth) and units (deg/rad);
   toggling converts the displayed field values in place without changing the
   underlying configuration.
-- **FR-3** User can set the turn radius via a slider (range 0.1–50 m) with a linked
-  entry field for exact values. Values outside the range are clamped.
+- **FR-3** User can set the turn radius via a spinbox (starts at 0.1 m).
+  Values below 0.1 are clamped.
 - **FR-4** User can drag the start/goal arrow **base** on the plot to move the
   configuration, and drag the arrow **head** to rotate its heading.
 - **FR-5** Keyboard nudging: arrow keys move the selected configuration by ±0.1 m;

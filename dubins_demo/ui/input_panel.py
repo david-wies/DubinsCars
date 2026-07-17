@@ -30,7 +30,6 @@ from dubins_demo.core.dubins import Config
 from dubins_demo.core.model import Convention, FixedRadius, Scenario, Unit
 
 _RADIUS_MIN = 0.1
-_RADIUS_MAX = 50.0
 
 
 def _fmt(value: float) -> str:
@@ -199,10 +198,10 @@ class InputPanel:
 
 
 class _FixedRadiusFrame:
-    """Swappable radius sub-frame (EXT-2): a slider linked to an entry.
+    """Swappable radius sub-frame (EXT-2): a spinbox linked to the model.
 
-    Both widgets drive ``FixedRadius.value`` through ``model.update`` and are
-    refreshed from the model on notification. Values outside ``[0.1, 50]`` are
+    The widget drives ``FixedRadius.value`` through ``model.update`` and is
+    refreshed from the model on notification. Values below ``0.1`` are
     clamped (FR-3). This class is intentionally self-contained so a future
     speed/vehicle-parameter frame can replace it without touching the rest of
     the input panel.
@@ -220,19 +219,16 @@ class _FixedRadiusFrame:
 
         self.frame = ttk.LabelFrame(parent, text="Turn radius [m]", padding=6)
 
-        self._scale = ttk.Scale(
+        self._spinbox = ttk.Spinbox(
             self.frame,
             from_=_RADIUS_MIN,
-            to=_RADIUS_MAX,
-            orient="horizontal",
-            command=self._on_slide,
+            to=100000.0,
+            increment=0.5,
+            command=self._on_spin,
         )
-        self._scale.grid(row=0, column=0, sticky="ew")
-
-        self._entry = ttk.Entry(self.frame, width=8)
-        self._entry.grid(row=0, column=1, padx=(6, 0))
-        self._entry.bind("<Return>", self._on_entry)
-        self._entry.bind("<FocusOut>", self._on_entry)
+        self._spinbox.grid(row=0, column=0, sticky="ew")
+        self._spinbox.bind("<Return>", self._on_entry)
+        self._spinbox.bind("<FocusOut>", self._on_entry)
 
         self.frame.columnconfigure(0, weight=1)
 
@@ -240,35 +236,37 @@ class _FixedRadiusFrame:
         return self.model.radius_policy.min_radius()
 
     def _apply(self, value: float) -> None:
-        clamped = min(_RADIUS_MAX, max(_RADIUS_MIN, value))
+        clamped = max(_RADIUS_MIN, value)
         self.model.update(radius_policy=FixedRadius(clamped))
 
-    def _on_slide(self, value: str) -> None:
+    def _on_spin(self) -> None:
         if self._refreshing:
             return
-        self._apply(float(value))
+        try:
+            value = float(self._spinbox.get())
+        except ValueError:
+            return
+        self._apply(value)
 
     def _on_entry(self, _event: object = None) -> None:
         if self._refreshing:
             return
         try:
-            value = float(self._entry.get())
+            value = float(self._spinbox.get())
         except ValueError:
-            self._entry.state(["invalid"])
+            self._spinbox.state(["invalid"])
             self._status("Turn radius: not a number — value unchanged.")
             return
-        self._entry.state(["!invalid"])
+        self._spinbox.state(["!invalid"])
         self._apply(value)
 
     def refresh(self, focused: tk.Misc | None) -> None:
-        """Rewrite the slider and entry from the model, skipping focused entry."""
+        """Rewrite the spinbox from the model, skipping focused entry."""
         self._refreshing = True
         try:
             value = self._current()
-            self._scale.set(value)
-            if self._entry is not focused:
-                self._entry.state(["!invalid"])
-                self._entry.delete(0, "end")
-                self._entry.insert(0, _fmt(value))
+            if self._spinbox is not focused:
+                self._spinbox.state(["!invalid"])
+                self._spinbox.set(_fmt(value))
         finally:
             self._refreshing = False

@@ -89,7 +89,7 @@
       Type a value and press <kbd>Enter</kbd> or click away (focus out) to commit it.
       Non-numeric text turns the field red and posts a message in the status bar; the
       stored configuration is left unchanged until you enter a valid number. Typed
-      input, dragging on the plot, and the radius slider are all bound to a single
+      input, dragging on the plot, and the radius spinbox are all bound to a single
       model, so a change in one place is reflected everywhere.
     </p>
 
@@ -155,13 +155,13 @@
 
     <h3 id="using-radius">Turn radius</h3>
     <p>
-      The <strong>radius slider</strong> (range 0.1&ndash;50&nbsp;m) with its linked
-      entry field sets the minimum turn radius
+      The <strong>radius spinbox</strong> (starts at 0.1&nbsp;m)
+      sets the minimum turn radius
       <math><mi>r</mi></math>
-      shared by every arc. Values outside the range are clamped. A smaller radius makes
+      shared by every arc. Values below 0.1 are clamped. A smaller radius makes
       tight turns possible (paths get shorter and CCC types become feasible); a larger
-      radius forces wide sweeping arcs. Slider and entry stay in sync and update the
-      paths as you drag.
+      radius forces wide sweeping arcs. The spinbox updates the
+      paths as you click or type.
     </p>
 
     <h3 id="using-table">Details table</h3>
