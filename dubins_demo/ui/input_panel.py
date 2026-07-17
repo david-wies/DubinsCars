@@ -239,18 +239,8 @@ class _FixedRadiusFrame:
         clamped = max(_RADIUS_MIN, value)
         self.model.update(radius_policy=FixedRadius(clamped))
 
-    def _on_spin(self) -> None:
-        if self._refreshing:
-            return
-        try:
-            value = float(self._spinbox.get())
-        except ValueError:
-            return
-        self._apply(value)
-
-    def _on_entry(self, _event: object = None) -> None:
-        if self._refreshing:
-            return
+    def _parse_and_apply(self) -> None:
+        """Parse the spinbox text and apply it, flagging a bad parse visibly."""
         try:
             value = float(self._spinbox.get())
         except ValueError:
@@ -259,6 +249,16 @@ class _FixedRadiusFrame:
             return
         self._spinbox.state(["!invalid"])
         self._apply(value)
+
+    def _on_spin(self) -> None:
+        if self._refreshing:
+            return
+        self._parse_and_apply()
+
+    def _on_entry(self, _event: object = None) -> None:
+        if self._refreshing:
+            return
+        self._parse_and_apply()
 
     def refresh(self, focused: tk.Misc | None) -> None:
         """Rewrite the spinbox from the model, skipping focused entry."""

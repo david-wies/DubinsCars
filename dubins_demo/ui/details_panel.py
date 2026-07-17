@@ -34,9 +34,13 @@ class DetailsPanel:
         model: Scenario,
         status_sink: Callable[[str], None],
     ) -> None:
-        """Build the table under ``parent`` and subscribe it to ``model``."""
+        """Build the table under ``parent`` and subscribe it to ``model``.
+
+        ``status_sink`` is accepted for a uniform panel signature; this panel
+        currently drives the status bar only indirectly (via the model), so it
+        holds no reference to the callback.
+        """
         self.model = model
-        self._status = status_sink
         self.frame = ttk.Frame(parent, padding=6)
 
         self._refreshing = False
@@ -73,7 +77,7 @@ class DetailsPanel:
             self._sort_reverse = False
         self._render()
 
-    def _sort_key(self, item: tuple[PathType, DubinsPath]):
+    def _sort_key(self, item: tuple[PathType, DubinsPath]) -> str | float:
         path_type, path = item
         if self._sort_col == "type":
             return path_type.value
@@ -135,6 +139,9 @@ class DetailsPanel:
         try:
             path_type = PathType[selection[0]]
         except KeyError:
+            # Unreachable in practice: every row iid is set to a PathType.name in
+            # _render(), so the lookup always succeeds. Guarded defensively so a
+            # stray selection can never raise out of the Tk callback.
             return
         # Tk delivers <<TreeviewSelect>> asynchronously, so the selection_set()
         # in _render() echoes back here after _refreshing has cleared. Bail when

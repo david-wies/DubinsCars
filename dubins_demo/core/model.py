@@ -32,9 +32,13 @@ class RadiusPolicy(Protocol):
     def min_radius(self) -> float: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class FixedRadius:
-    """A constant turn radius driven directly by the UI (EXT-1)."""
+    """A constant turn radius driven directly by the UI (EXT-1).
+
+    Frozen so that a value object holding it (e.g. ``LoadedScenario``) is
+    genuinely immutable; change the radius by constructing a new instance.
+    """
 
     value: float
 
@@ -58,7 +62,28 @@ class Unit(Enum):
 
 
 class Scenario:
-    """Mutable, observable scenario state with cached Dubins solutions."""
+    """Observable scenario state with cached Dubins solutions.
+
+    All input/display state is held in private fields exposed through read-only
+    :func:`property` accessors. :meth:`update` is the *sole* mutator: it is the
+    only way to change a field, and it always re-solves and notifies, so the
+    cached ``solutions`` / ``highlighted`` can never go stale behind the views'
+    backs.
+    """
+
+    #: Fields that :meth:`update` may set. The derived caches (``solutions``,
+    #: ``highlighted``) are deliberately absent -- they are recomputed, never set.
+    _SETTABLE = frozenset(
+        {
+            "start",
+            "goal",
+            "radius_policy",
+            "heading_convention",
+            "angle_unit",
+            "selected_type",
+            "show_circles",
+        }
+    )
 
     def __init__(
         self,
@@ -72,19 +97,73 @@ class Scenario:
         show_circles: bool = False,
         animation_speed: float = 1.0,
     ) -> None:
-        self.start = start
-        self.goal = goal
-        self.radius_policy = radius_policy
-        self.heading_convention = heading_convention
-        self.angle_unit = angle_unit
-        self.selected_type = selected_type
-        self.show_circles = show_circles
-        self.animation_speed = animation_speed
+        self._start = start
+        self._goal = goal
+        self._radius_policy = radius_policy
+        self._heading_convention = heading_convention
+        self._angle_unit = angle_unit
+        self._selected_type = selected_type
+        self._show_circles = show_circles
+        self._animation_speed = animation_speed
 
         self._listeners: list[Callable[[], None]] = []
-        self.solutions: dict[PathType, DubinsPath | Infeasible] = {}
-        self.highlighted: PathType | None = None
+        self._solutions: dict[PathType, DubinsPath | Infeasible] = {}
+        self._highlighted: PathType | None = None
         self._resolve()  # valid solutions/highlighted immediately after construction
+
+    # -- read-only accessors -------------------------------------------------
+
+    @property
+    def start(self) -> Config:
+        """The start configuration (set via :meth:`update`)."""
+        return self._start
+
+    @property
+    def goal(self) -> Config:
+        """The goal configuration (set via :meth:`update`)."""
+        return self._goal
+
+    @property
+    def radius_policy(self) -> RadiusPolicy:
+        """The turn-radius policy (set via :meth:`update`)."""
+        return self._radius_policy
+
+    @property
+    def heading_convention(self) -> Convention:
+        """The heading display convention (set via :meth:`update`)."""
+        return self._heading_convention
+
+    @property
+    def angle_unit(self) -> Unit:
+        """The angle display unit (set via :meth:`update`)."""
+        return self._angle_unit
+
+    @property
+    def selected_type(self) -> PathType | None:
+        """The user-selected word to highlight, if any (set via :meth:`update`)."""
+        return self._selected_type
+
+    @property
+    def show_circles(self) -> bool:
+        """Whether turning circles are shown (set via :meth:`update`)."""
+        return self._show_circles
+
+    @property
+    def animation_speed(self) -> float:
+        """The animation speed in m/s (set via :meth:`update`)."""
+        return self._animation_speed
+
+    @property
+    def solutions(self) -> dict[PathType, DubinsPath | Infeasible]:
+        """The cached per-word solver results (recomputed by :meth:`update`)."""
+        return self._solutions
+
+    @property
+    def highlighted(self) -> PathType | None:
+        """The word currently highlighted, or ``None`` if none is feasible."""
+        return self._highlighted
+
+    # -- listeners / mutation ------------------------------------------------
 
     def add_listener(self, cb: Callable[[], None]) -> None:
         """Register a zero-argument callback fired after each :meth:`update`."""
@@ -93,24 +172,37 @@ class Scenario:
     def update(self, **changes: object) -> None:
         """Apply field changes, re-solve, then notify all listeners exactly once.
 
-        Only existing public attributes may be set; an unknown field name is a
-        programming error and raises :class:`AttributeError`.
+        Only the settable input/display fields in :attr:`_SETTABLE` may be
+        changed; the derived caches (``solutions``, ``highlighted``) and any
+        unknown name are rejected with :class:`AttributeError`.
         """
         for name, value in changes.items():
-            if not hasattr(self, name) or name.startswith("_"):
-                raise AttributeError(f"unknown scenario field: {name!r}")
-            setattr(self, name, value)
+            if name not in self._SETTABLE:
+                raise AttributeError(f"unknown or read-only scenario field: {name!r}")
+            setattr(self, f"_{name}", value)
         self._resolve()
         self._notify()
 
+    def set_animation_speed(self, speed: float) -> None:
+        """Set playback speed *without* re-solving or notifying.
+
+        Animation speed is pure playback state; it does not affect the geometry.
+        Routing it through :meth:`update` would waste a re-solve and, worse,
+        trigger the FR-15 "any scenario change resets the animation" teardown in
+        the views -- editing the speed while a path is animating would stop it.
+        This dedicated setter keeps the field encapsulated (no public attribute
+        write) while leaving a running animation untouched.
+        """
+        self._animation_speed = speed
+
     def _resolve(self) -> None:
         """Recompute cached ``solutions`` and the ``highlighted`` selection."""
-        self.solutions = solve_all(self.start, self.goal, self.radius_policy.min_radius())
-        selected = self.selected_type
-        if selected is not None and isinstance(self.solutions.get(selected), DubinsPath):
-            self.highlighted = selected
+        self._solutions = solve_all(self._start, self._goal, self._radius_policy.min_radius())
+        selected = self._selected_type
+        if selected is not None and isinstance(self._solutions.get(selected), DubinsPath):
+            self._highlighted = selected
         else:
-            self.highlighted = shortest(self.solutions)
+            self._highlighted = shortest(self._solutions)
 
     def _notify(self) -> None:
         for cb in self._listeners:

@@ -163,8 +163,10 @@ class App:
         if not path:
             return
         try:
+            # export_waypoints_csv samples the path before opening the file, so
+            # a compute error (ValueError) is guarded here alongside I/O errors.
             export_waypoints_csv(path, solution, step)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             messagebox.showerror("Export failed", str(exc))
             return
         self._set_status(f"Exported {highlighted.value} waypoints to {path}")
@@ -172,21 +174,35 @@ class App:
     # -- help menu -----------------------------------------------------------
 
     def _help_url(self) -> str:
-        """Return a ``file://`` URL for the bundled help page, cross-platform."""
+        """Return a ``file://`` URL for the bundled help page, cross-platform.
+
+        Both the packaged-resource location and the source-tree fallback are
+        checked for an existing file before their URL is returned; if neither
+        exists, :class:`FileNotFoundError` is raised rather than handing back a
+        URL that points at a missing page.
+        """
         try:
             resource = importlib.resources.files("dubins_demo") / "help" / "index.html"
             candidate = Path(str(resource))
-            if not candidate.is_file():
-                raise FileNotFoundError
-        except (FileNotFoundError, ModuleNotFoundError, TypeError):
-            candidate = Path(__file__).resolve().parent.parent / "help" / "index.html"
-        return candidate.resolve().as_uri()
+            if candidate.is_file():
+                return candidate.resolve().as_uri()
+        except (ModuleNotFoundError, TypeError):
+            pass
+        fallback = Path(__file__).resolve().parent.parent / "help" / "index.html"
+        if fallback.is_file():
+            return fallback.resolve().as_uri()
+        raise FileNotFoundError("bundled help page (help/index.html) not found")
 
     def _on_help(self) -> None:
         try:
-            webbrowser.open(self._help_url())
-        except OSError as exc:
+            opened = webbrowser.open(self._help_url())
+        except OSError as exc:  # FileNotFoundError (missing page) is an OSError
             messagebox.showerror("Help unavailable", str(exc))
+            return
+        if not opened:
+            messagebox.showerror(
+                "Help unavailable", "No web browser could be opened for the help page."
+            )
 
     # -- lifecycle -----------------------------------------------------------
 

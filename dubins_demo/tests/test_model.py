@@ -47,8 +47,27 @@ def test_update_notifies_listeners_exactly_once() -> None:
     scenario.update(goal=Config(8.0, -3.0, 0.0), show_circles=True)
     assert calls == {"a": 1, "b": 1}
 
-    scenario.update(animation_speed=2.0)
+    scenario.update(show_circles=False)
     assert calls == {"a": 2, "b": 2}
+
+
+def test_set_animation_speed_does_not_notify_or_resolve() -> None:
+    scenario = _make_scenario()
+    solutions_before = scenario.solutions
+    calls = {"n": 0}
+    scenario.add_listener(lambda: calls.__setitem__("n", calls["n"] + 1))
+
+    scenario.set_animation_speed(2.0)
+
+    assert scenario.animation_speed == 2.0
+    assert calls["n"] == 0  # playback state must not fire the FR-15 reset
+    assert scenario.solutions is solutions_before  # no re-solve
+
+
+def test_animation_speed_is_not_settable_via_update() -> None:
+    scenario = _make_scenario()
+    with pytest.raises(AttributeError):
+        scenario.update(animation_speed=2.0)
 
 
 def test_update_applies_changes_and_resolves() -> None:
@@ -84,6 +103,26 @@ def test_unknown_field_rejected() -> None:
         scenario.update(nonexistent_field=123)
     with pytest.raises(AttributeError):
         scenario.update(_listeners=[])
+
+
+def test_highlighted_none_when_all_infeasible() -> None:
+    scenario = _make_scenario()
+    # A non-positive radius makes every word infeasible, so nothing is highlighted.
+    scenario.update(radius_policy=FixedRadius(0.0))
+    assert scenario.highlighted is None
+    assert all(not isinstance(s, DubinsPath) for s in scenario.solutions.values())
+
+
+def test_derived_caches_are_read_only() -> None:
+    scenario = _make_scenario()
+    # ``solutions`` / ``highlighted`` are recomputed, never set through update().
+    with pytest.raises(AttributeError):
+        scenario.update(solutions={})
+    with pytest.raises(AttributeError):
+        scenario.update(highlighted=PathType.LSL)
+    # And the properties themselves reject direct assignment.
+    with pytest.raises(AttributeError):
+        scenario.start = Config(1.0, 1.0, 0.0)  # type: ignore[misc]
 
 
 def test_display_prefs_do_not_affect_solutions() -> None:

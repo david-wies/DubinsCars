@@ -265,3 +265,169 @@ def test_segment_immutability() -> None:
     seg = Segment(SegmentKind.S, 3.0)
     with pytest.raises((AttributeError, TypeError)):
         seg.length = 4.0  # type: ignore[misc]
+
+
+# --- Value-object validation -------------------------------------------------
+
+
+def test_segment_rejects_negative_length() -> None:
+    with pytest.raises(ValueError, match="length"):
+        Segment(SegmentKind.S, -0.1)
+
+
+def test_dubins_path_rejects_non_positive_radius() -> None:
+    seg = Segment(SegmentKind.S, 1.0)
+    with pytest.raises(ValueError, match="radius"):
+        DubinsPath(PathType.LSL, (seg, seg, seg), 0.0, Config(0.0, 0.0, 0.0))
+
+
+# --- In-place U-turn (coincident position, reversed heading) -----------------
+
+
+def test_in_place_uturn_is_a_feasible_ccc_maneuver() -> None:
+    # Same position, opposite heading: distance d == 0 but headings differ, so
+    # the turn must be made with a CCC (RLR/LRL) word.
+    start = Config(2.0, 2.0, 0.0)
+    goal = Config(2.0, 2.0, math.pi)
+    sols = solve_all(start, goal, 1.5)
+    ccc = [sols[PathType.RLR], sols[PathType.LRL]]
+    feasible = [p for p in ccc if isinstance(p, DubinsPath)]
+    assert feasible, "an in-place U-turn must be reachable by at least one CCC word"
+    for path in feasible:
+        end = path.sample(0.01)[-1]
+        # The maneuver returns to the start point at the reversed heading.
+        assert end[0] == pytest.approx(start.x, abs=1e-6)
+        assert end[1] == pytest.approx(start.y, abs=1e-6)
+        assert _angle_diff(end[2], normalize(goal.theta)) < 1e-6
+        # A genuine three-arc maneuver, not a degenerate zero-length path.
+        assert path.length > 0.0
+
+
+# --- Independent geometric length oracles ------------------------------------
+# The endpoint tests above prove each path *reaches* the goal, but an arc length
+# wrong by a multiple of 2*pi*r would land on the same endpoint. These cross-
+# check the solver's segment lengths against paths built from tangent-circle
+# geometry, wholly independent of the closed-form canonical-frame solver.
+
+
+def _fwd(start: Config, segs: list[tuple[str, float]], radius: float) -> tuple[float, float, float]:
+    """Forward-integrate a ``(kind, length)`` list with plain trig."""
+    x, y, th = start.x, start.y, start.theta
+    for kind, length in segs:
+        if kind == "S":
+            x += length * math.cos(th)
+            y += length * math.sin(th)
+        elif kind == "L":
+            cx, cy = x - radius * math.sin(th), y + radius * math.cos(th)
+            th += length / radius
+            x, y = cx + radius * math.sin(th), cy - radius * math.cos(th)
+        else:  # "R"
+            cx, cy = x + radius * math.sin(th), y - radius * math.cos(th)
+            th -= length / radius
+            x, y = cx - radius * math.sin(th), cy + radius * math.cos(th)
+    return x, y, th
+
+
+def _left_center(cfg: Config, r: float) -> tuple[float, float]:
+    return (cfg.x - r * math.sin(cfg.theta), cfg.y + r * math.cos(cfg.theta))
+
+
+def _right_center(cfg: Config, r: float) -> tuple[float, float]:
+    return (cfg.x + r * math.sin(cfg.theta), cfg.y - r * math.cos(cfg.theta))
+
+
+def _csc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[tuple[str, float]]:
+    """Build a CSC (LSL/RSR/LSR/RSL) path from tangent geometry, solver-free."""
+    if word is PathType.LSL:
+        c1, c2 = _left_center(start, r), _left_center(goal, r)
+        dx, dy = c2[0] - c1[0], c2[1] - c1[1]
+        psi = math.atan2(dy, dx)  # outer-tangent travel direction
+        return [
+            ("L", r * normalize(psi - start.theta)),
+            ("S", math.hypot(dx, dy)),
+            ("L", r * normalize(goal.theta - psi)),
+        ]
+    if word is PathType.RSR:
+        c1, c2 = _right_center(start, r), _right_center(goal, r)
+        dx, dy = c2[0] - c1[0], c2[1] - c1[1]
+        psi = math.atan2(dy, dx)
+        return [
+            ("R", r * normalize(start.theta - psi)),
+            ("S", math.hypot(dx, dy)),
+            ("R", r * normalize(psi - goal.theta)),
+        ]
+    # Inner tangent between opposite-sense circles (LSR / RSL).
+    if word is PathType.LSR:
+        c1, c2 = _left_center(start, r), _right_center(goal, r)
+        sign, k1, k3 = +1.0, "L", "R"
+    elif word is PathType.RSL:
+        c1, c2 = _right_center(start, r), _left_center(goal, r)
+        sign, k1, k3 = -1.0, "R", "L"
+    else:
+        raise ValueError(word)
+    dx, dy = c2[0] - c1[0], c2[1] - c1[1]
+    dist = math.hypot(dx, dy)
+    theta_c = math.atan2(dy, dx)
+    psi = theta_c + sign * math.asin(2.0 * r / dist)
+    straight = math.sqrt(dist * dist - 4.0 * r * r)
+    # Arc sweep sign depends on turn direction: +delta for L (CCW), -delta for R.
+    l1 = r * normalize(psi - start.theta) if k1 == "L" else r * normalize(start.theta - psi)
+    l3 = r * normalize(goal.theta - psi) if k3 == "L" else r * normalize(psi - goal.theta)
+    return [(k1, l1), ("S", straight), (k3, l3)]
+
+
+_CSC_FIXED = [
+    (Config(0.0, 0.0, 0.5), Config(9.0, 4.0, 2.0), 1.3),
+    (Config(-3.0, 2.0, 1.2), Config(6.0, -5.0, -0.4), 2.1),
+    (Config(1.0, 1.0, 0.0), Config(12.0, 3.0, 0.7), 1.0),
+]
+
+
+@pytest.mark.parametrize("start,goal,radius", _CSC_FIXED)
+@pytest.mark.parametrize("word", [PathType.LSL, PathType.RSR, PathType.LSR, PathType.RSL])
+def test_csc_segment_lengths_match_tangent_oracle(
+    word: PathType, start: Config, goal: Config, radius: float
+) -> None:
+    sol = solve_all(start, goal, radius)[word]
+    if not isinstance(sol, DubinsPath):
+        pytest.skip(f"{word.value} infeasible for this fixture")
+    segs = _csc_oracle(word, start, goal, radius)
+    # Self-validate the oracle: its own segments must reconstruct the goal.
+    ex, ey, eth = _fwd(start, segs, radius)
+    assert ex == pytest.approx(goal.x, abs=1e-9)
+    assert ey == pytest.approx(goal.y, abs=1e-9)
+    assert _angle_diff(eth, goal.theta) < 1e-9
+    # Cross-check the solver's per-segment lengths against the oracle.
+    for seg, (_kind, length) in zip(sol.segments, segs, strict=True):
+        assert seg.length == pytest.approx(length, abs=1e-9)
+
+
+_FAR_FIXED = [
+    (Config(0.0, 0.0, 0.3), Config(40.0, 12.0, 2.4), 1.5),
+    (Config(-5.0, 3.0, -1.0), Config(35.0, -20.0, 0.9), 2.0),
+]
+
+
+@pytest.mark.parametrize("start,goal,radius", _FAR_FIXED)
+def test_shortest_matches_min_csc_for_far_goals(start: Config, goal: Config, radius: float) -> None:
+    # For widely separated configurations the optimum is always a CSC word, so
+    # shortest() must agree with a brute-force minimum over the independently
+    # constructed CSC candidate lengths.
+    sols = solve_all(start, goal, radius)
+    best = shortest(sols)
+    assert best in {PathType.LSL, PathType.RSR, PathType.LSR, PathType.RSL}
+
+    oracle_min = math.inf
+    for word in (PathType.LSL, PathType.RSR, PathType.LSR, PathType.RSL):
+        if not isinstance(sols[word], DubinsPath):
+            continue
+        segs = _csc_oracle(word, start, goal, radius)
+        ex, ey, eth = _fwd(start, segs, radius)
+        assert ex == pytest.approx(goal.x, abs=1e-9)  # oracle self-check
+        assert ey == pytest.approx(goal.y, abs=1e-9)
+        assert _angle_diff(eth, goal.theta) < 1e-9
+        oracle_min = min(oracle_min, sum(length for _kind, length in segs))
+
+    best_sol = sols[best]
+    assert isinstance(best_sol, DubinsPath)
+    assert best_sol.length == pytest.approx(oracle_min, abs=1e-9)

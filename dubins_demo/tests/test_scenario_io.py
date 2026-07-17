@@ -149,6 +149,43 @@ def test_non_numeric_coordinate_raises() -> None:
     assert "start.x" in str(excinfo.value)
 
 
+def test_bool_coordinate_rejected() -> None:
+    # bool is an int subclass; ``true``/``false`` must not pass as a coordinate.
+    document = scenario_to_dict(_make_scenario())
+    document["start"]["x"] = True
+
+    with pytest.raises(ScenarioError) as excinfo:
+        dict_to_scenario(document)
+    assert "start.x" in str(excinfo.value)
+
+
+def test_scenario_to_dict_rejects_non_fixed_radius_policy() -> None:
+    class _StubPolicy:
+        def min_radius(self) -> float:
+            return 2.0
+
+    scenario = Scenario(
+        start=Config(0.0, 0.0, 0.0),
+        goal=Config(5.0, 0.0, 0.0),
+        radius_policy=_StubPolicy(),
+    )
+    with pytest.raises(ScenarioError):
+        scenario_to_dict(scenario)
+
+
+def test_load_missing_file_raises_filenotfound_not_scenario_error(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.json"
+    with pytest.raises(FileNotFoundError) as excinfo:
+        load_scenario(missing)
+    # A missing file is a filesystem concern, distinct from a bad document.
+    assert not isinstance(excinfo.value, ScenarioError)
+
+
+def test_top_level_non_object_json_raises() -> None:
+    with pytest.raises(ScenarioError):
+        dict_to_scenario([1, 2, 3])
+
+
 def test_invalid_display_enum_raises() -> None:
     document = scenario_to_dict(_make_scenario())
     document["display"]["angle_unit"] = "gradians"

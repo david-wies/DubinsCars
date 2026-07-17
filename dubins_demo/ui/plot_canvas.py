@@ -166,6 +166,11 @@ class PlotCanvas:
     def _radius(self) -> float:
         return self.model.radius_policy.min_radius()
 
+    def _arrow_length(self, radius: float) -> float:
+        """Arrow length in meters: proportional to ``radius`` but clamped so it
+        stays visible for tiny radii and never dominates for large ones."""
+        return min(max(radius, _ARROW_FLOOR), _ARROW_CAP)
+
     def _clear_artists(self) -> None:
         for line in self._path_lines:
             line.remove()
@@ -228,7 +233,7 @@ class PlotCanvas:
         name: str,
         all_xy: list[tuple[float, float]],
     ) -> None:
-        length = min(max(radius, _ARROW_FLOOR), _ARROW_CAP)
+        length = self._arrow_length(radius)
         dx = length * math.cos(cfg.theta)
         dy = length * math.sin(cfg.theta)
         arrow = FancyArrow(
@@ -266,7 +271,7 @@ class PlotCanvas:
 
     def _draw_selection(self, radius: float) -> None:
         cfg = getattr(self.model, self._selected)
-        length = min(max(radius, _ARROW_FLOOR), _ARROW_CAP)
+        length = self._arrow_length(radius)
         outline = Circle(
             (cfg.x, cfg.y),
             length * 0.30,
@@ -346,7 +351,7 @@ class PlotCanvas:
         hit = self._hit_test(event)
         if hit is None:
             return
-        name, mode = hit
+        name, _mode = hit  # mode is resolved again on drag; only the name is needed here
         self._drag = hit
         self._selected = name
         self._redraw()  # show the selection cue immediately
@@ -395,9 +400,9 @@ class PlotCanvas:
         if speed <= 0.0:
             self._status("Speed must be positive.")
             return
-        # Speed does not affect the geometry, so set it directly instead of
-        # routing through model.update (which would re-solve and reset the view).
-        self.model.animation_speed = speed
+        # Speed is playback-only state: use the dedicated setter so it does not
+        # re-solve or fire the notify that would stop a running animation.
+        self.model.set_animation_speed(speed)
         self._speed_var.set(f"{speed:g}")
 
     def _toggle_animation(self) -> None:

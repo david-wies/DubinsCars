@@ -22,8 +22,6 @@ import numpy as np
 
 from dubins_demo.core.angles import normalize
 
-_TAU = 2.0 * math.pi
-
 
 class SegmentKind(Enum):
     """The three primitive segment kinds of a Dubins path."""
@@ -65,6 +63,10 @@ class Segment:
 
     kind: SegmentKind
     length: float
+
+    def __post_init__(self) -> None:
+        if self.length < 0.0:
+            raise ValueError(f"segment length must be >= 0, got {self.length!r}")
 
 
 @dataclass(frozen=True)
@@ -111,9 +113,13 @@ class DubinsPath:
     """A feasible Dubins path: exactly three segments at a fixed turn radius."""
 
     path_type: PathType
-    segments: tuple[Segment, ...]  # exactly three
+    segments: tuple[Segment, Segment, Segment]
     radius: float
     start: Config
+
+    def __post_init__(self) -> None:
+        if self.radius <= 0.0:
+            raise ValueError(f"turn radius must be positive, got {self.radius!r}")
 
     @property
     def length(self) -> float:
@@ -124,8 +130,10 @@ class DubinsPath:
         """Sample the path into an ``(N, 3)`` array of ``(x, y, theta)``.
 
         Points are spaced at most ``step`` meters apart along the arc length,
-        and the final row is exactly the goal configuration (headings are
-        normalized to ``[0, 2*pi)``). Tests rely on both properties.
+        and the final row is exactly the path's endpoint -- equal to the goal
+        configuration up to solver tolerance -- since it is placed at the exact
+        total arc length (headings are normalized to ``[0, 2*pi)``). Tests rely
+        on both properties.
         """
         # Precompute the entry configuration of each segment.
         starts: list[tuple[float, float, float]] = []
@@ -219,7 +227,7 @@ def _rlr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (math.sin(alpha) - math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))  # middle arc, > pi
+    p = normalize(-math.acos(tmp))  # middle arc, >= pi
     t = normalize(
         alpha
         - math.atan2(math.cos(alpha) - math.cos(beta), d - math.sin(alpha) + math.sin(beta))
@@ -233,7 +241,7 @@ def _lrl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (-math.sin(alpha) + math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))
+    p = normalize(-math.acos(tmp))  # middle arc, >= pi
     t = normalize(
         -alpha
         + math.atan2(-math.cos(alpha) + math.cos(beta), d + math.sin(alpha) - math.sin(beta))
@@ -273,14 +281,22 @@ def _solve_one(
     try:
         alpha, beta, d = _canonical_frame(start, goal, radius)
         result = solver(alpha, beta, d)
-    except (ValueError, ZeroDivisionError) as exc:  # domain error escaped a solver
-        return Infeasible(path_type, f"no solution ({exc})")
+    except ValueError as exc:
+        # A ValueError here is not legitimate geometric infeasibility (that is
+        # signalled by a ``None`` return); it means an unexpected internal error
+        # slipped past the closed-form guards. Surface it distinctly rather than
+        # letting it raise, preserving FR-8/FR-24 (solvers must not raise).
+        # ZeroDivisionError is intentionally not caught: solve_all guards
+        # radius > 0, so it cannot occur; let it surface if it ever does.
+        return Infeasible(path_type, f"INTERNAL: unexpected {type(exc).__name__}: {exc}")
     if result is None:
         return Infeasible(path_type, default_reason)
     t, p, q = result
-    segments = tuple(
-        Segment(kind, param * radius)
-        for kind, param in zip(path_type.kinds, (t, p, q), strict=True)
+    k0, k1, k2 = path_type.kinds
+    segments = (
+        Segment(k0, t * radius),
+        Segment(k1, p * radius),
+        Segment(k2, q * radius),
     )
     return DubinsPath(path_type=path_type, segments=segments, radius=radius, start=start)
 
