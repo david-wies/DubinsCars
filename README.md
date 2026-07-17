@@ -6,8 +6,27 @@ two oriented configurations in the plane. It's both a practical calculator and a
 teaching tool: it shows *all* candidate path types (LSL, RSR, LSR, RSL, RLR, LRL),
 their construction, and the math behind them.
 
-Status: scaffolding only. The math core, UI, and persistence layers land in
-subsequent work — see the docs below for the full plan.
+## Running the app
+
+Requires Python >= 3.10 with Tkinter (bundled with the standard CPython
+installers on Windows and macOS; on Debian/Ubuntu install `python3-tk`).
+
+```bash
+python -m venv .venv
+# Linux/macOS:
+source .venv/bin/activate
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+
+pip install -e .          # installs numpy + matplotlib
+python -m dubins_demo     # launches the desktop app
+```
+
+In the app: type start/goal configurations or drag the arrows on the plot
+(base to move, head to rotate), set the turn radius with the slider, and read
+every feasible path type in the details table. **File** saves/loads scenarios
+as JSON and exports the highlighted path's waypoints as CSV; **Help** opens the
+offline guide (usage + Dubins theory) in your browser.
 
 ## Documentation
 
@@ -44,8 +63,5 @@ pre-commit run --all-files  # run everything once, e.g. before pushing
 CI (`.github/workflows/ci.yml`) runs the exact same `pre-commit` hooks plus
 `pytest` on every push and pull request against `master`.
 
-Once the app exists, it will run via:
-
-```bash
-python -m dubins_demo
-```
+Install the dev extras (`pip install -e ".[dev]"`) to get `pytest`, `ruff`,
+and `pre-commit`.
