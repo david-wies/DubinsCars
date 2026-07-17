@@ -29,7 +29,6 @@ from dubins_demo.core.angles import (
 from dubins_demo.core.dubins import Config
 from dubins_demo.core.model import Convention, FixedRadius, Scenario, Unit
 
-_ERROR_BG = "#ffcccc"  # light red so the (dark) entry text stays readable
 _RADIUS_MIN = 0.1
 _RADIUS_MAX = 50.0
 
@@ -64,7 +63,7 @@ class InputPanel:
         self.frame = ttk.Frame(parent, padding=6)
 
         self._refreshing = False
-        self._entries: dict[str, tk.Entry] = {}
+        self._entries: dict[str, ttk.Entry] = {}
 
         self._build_config_group("Start", "start")
         self._build_config_group("Goal", "goal")
@@ -72,8 +71,6 @@ class InputPanel:
 
         self._radius = _FixedRadiusFrame(self.frame, model, status_sink)
         self._radius.frame.pack(fill="x", pady=(8, 0))
-
-        self._normal_bg = self._entries["start_x"].cget("background")
 
         self.model.add_listener(self._on_model_changed)
         self._on_model_changed()
@@ -87,7 +84,7 @@ class InputPanel:
         for row, (label, field) in enumerate(labels):
             ttk.Label(group, text=label).grid(row=row, column=0, sticky="w", padx=(0, 6))
             key = f"{which}_{field}"
-            entry = tk.Entry(group, width=12)
+            entry = ttk.Entry(group, width=12)
             entry.grid(row=row, column=1, sticky="ew", pady=1)
             entry.bind("<Return>", lambda _e, k=key: self._commit(k))
             entry.bind("<FocusOut>", lambda _e, k=key: self._commit(k))
@@ -159,10 +156,10 @@ class InputPanel:
         try:
             raw = float(entry.get())
         except ValueError:
-            entry.configure(background=_ERROR_BG)
+            entry.state(["invalid"])
             self._status(f"{key.replace('_', ' ')}: not a number — value unchanged.")
             return
-        entry.configure(background=self._normal_bg)
+        entry.state(["!invalid"])
 
         which, field = self._FIELDS[key]
         cfg: Config = getattr(self.model, which)
@@ -193,7 +190,7 @@ class InputPanel:
             for key, entry in self._entries.items():
                 if entry is focused:
                     continue
-                entry.configure(background=self._normal_bg)
+                entry.state(["!invalid"])
                 entry.delete(0, "end")
                 entry.insert(0, self._display_value(key))
             self._radius.refresh(focused)
@@ -223,24 +220,21 @@ class _FixedRadiusFrame:
 
         self.frame = ttk.LabelFrame(parent, text="Turn radius [m]", padding=6)
 
-        self._scale = tk.Scale(
+        self._scale = ttk.Scale(
             self.frame,
             from_=_RADIUS_MIN,
             to=_RADIUS_MAX,
-            resolution=0.1,
             orient="horizontal",
-            showvalue=False,
             command=self._on_slide,
         )
         self._scale.grid(row=0, column=0, sticky="ew")
 
-        self._entry = tk.Entry(self.frame, width=8)
+        self._entry = ttk.Entry(self.frame, width=8)
         self._entry.grid(row=0, column=1, padx=(6, 0))
         self._entry.bind("<Return>", self._on_entry)
         self._entry.bind("<FocusOut>", self._on_entry)
 
         self.frame.columnconfigure(0, weight=1)
-        self._normal_bg = self._entry.cget("background")
 
     def _current(self) -> float:
         return self.model.radius_policy.min_radius()
@@ -260,10 +254,10 @@ class _FixedRadiusFrame:
         try:
             value = float(self._entry.get())
         except ValueError:
-            self._entry.configure(background=_ERROR_BG)
+            self._entry.state(["invalid"])
             self._status("Turn radius: not a number — value unchanged.")
             return
-        self._entry.configure(background=self._normal_bg)
+        self._entry.state(["!invalid"])
         self._apply(value)
 
     def refresh(self, focused: tk.Misc | None) -> None:
@@ -273,7 +267,7 @@ class _FixedRadiusFrame:
             value = self._current()
             self._scale.set(value)
             if self._entry is not focused:
-                self._entry.configure(background=self._normal_bg)
+                self._entry.state(["!invalid"])
                 self._entry.delete(0, "end")
                 self._entry.insert(0, _fmt(value))
         finally:

@@ -126,7 +126,7 @@ class PlotCanvas:
 
         ttk.Label(controls, text="Speed (m/s):").pack(side="left")
         self._speed_var = tk.StringVar(value=f"{self.model.animation_speed:g}")
-        speed_entry = tk.Entry(controls, textvariable=self._speed_var, width=7)
+        speed_entry = ttk.Entry(controls, textvariable=self._speed_var, width=7)
         speed_entry.pack(side="left", padx=(2, 12))
         speed_entry.bind("<FocusOut>", self._commit_speed)
         speed_entry.bind("<Return>", self._commit_speed)

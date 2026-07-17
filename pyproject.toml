@@ -19,7 +19,7 @@ classifiers = [
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering",
 ]
-dependencies = ["numpy", "matplotlib"]
+dependencies = ["numpy", "matplotlib", "sv-ttk"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.15", "pre-commit>=4"]

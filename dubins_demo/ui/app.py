@@ -16,6 +16,7 @@ import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
+import sv_ttk
 
 from dubins_demo.core.dubins import DubinsPath
 from dubins_demo.core.model import Scenario
@@ -50,6 +51,8 @@ class App:
 
         self.model.add_listener(self._on_model_changed)
         self._on_model_changed()
+
+        sv_ttk.set_theme("light")
 
     # -- layout --------------------------------------------------------------
 
