@@ -29,6 +29,7 @@ from matplotlib.patches import Circle, FancyArrow
 from dubins_demo.core.angles import normalize
 from dubins_demo.core.dubins import Config, DubinsPath, PathType, turning_centers
 from dubins_demo.core.model import Scenario
+from dubins_demo.ui import theme
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from matplotlib.backend_bases import MouseEvent
@@ -75,6 +76,7 @@ class PlotCanvas:
         self.figure = Figure(figsize=(6.0, 5.0), layout=None)
         self.ax = self.figure.add_subplot(111)
         self.ax.set_aspect("equal", adjustable="box")
+        theme.style_axes(self.figure, self.ax)
         # Reserve room on the right for the legend placed outside the axes.
         self.figure.subplots_adjust(left=0.10, right=0.78, top=0.96, bottom=0.08)
 
@@ -121,13 +123,19 @@ class PlotCanvas:
     # -- widget construction -------------------------------------------------
 
     def _build_controls(self, controls: ttk.Frame) -> None:
-        self._play_button = ttk.Button(controls, text="▶", width=3, command=self._toggle_animation)
-        self._play_button.pack(side="left", padx=(4, 8), pady=2)
+        self._play_button = ttk.Button(
+            controls,
+            text="▶",
+            width=3,
+            style=theme.PRIMARY_BUTTON,
+            command=self._toggle_animation,
+        )
+        self._play_button.pack(side="left", padx=(0, theme.PAD_M), pady=theme.PAD_S)
 
-        ttk.Label(controls, text="Speed (m/s):").pack(side="left")
+        ttk.Label(controls, text="Speed (m/s):").pack(side="left", padx=(0, theme.PAD_S))
         self._speed_var = tk.StringVar(value=f"{self.model.animation_speed:g}")
         speed_entry = ttk.Entry(controls, textvariable=self._speed_var, width=7)
-        speed_entry.pack(side="left", padx=(2, 12))
+        speed_entry.pack(side="left", padx=(0, theme.PAD_M))
         speed_entry.bind("<FocusOut>", self._commit_speed)
         speed_entry.bind("<Return>", self._commit_speed)
 
@@ -137,7 +145,7 @@ class PlotCanvas:
             text="Turning circles",
             variable=self._circles_var,
             command=self._toggle_circles,
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, theme.PAD_S))
 
     def _connect_events(self, canvas_widget: tk.Widget) -> None:
         self.canvas.mpl_connect("button_press_event", self._on_press)
@@ -221,6 +229,7 @@ class PlotCanvas:
                 fontsize="small",
                 title="Path type",
             )
+            theme.style_legend(self._legend)
 
         self._fit_view(all_xy)
         self.canvas.draw_idle()
@@ -262,7 +271,7 @@ class PlotCanvas:
                     radius,
                     fill=False,
                     linestyle="--",
-                    edgecolor="#999999",
+                    edgecolor=theme.SPINE,
                     linewidth=1.0,
                     zorder=2,
                 )

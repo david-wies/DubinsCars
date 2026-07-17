@@ -28,6 +28,7 @@ from dubins_demo.core.angles import (
 )
 from dubins_demo.core.dubins import Config
 from dubins_demo.core.model import Convention, FixedRadius, Scenario, Unit
+from dubins_demo.ui import theme
 
 _RADIUS_MIN = 0.1
 
@@ -59,7 +60,7 @@ class InputPanel:
         """Build the panel under ``parent`` and subscribe it to ``model``."""
         self.model = model
         self._status = status_sink
-        self.frame = ttk.Frame(parent, padding=6)
+        self.frame = ttk.Frame(parent, padding=theme.PAD_L)
 
         self._refreshing = False
         self._entries: dict[str, ttk.Entry] = {}
@@ -69,7 +70,7 @@ class InputPanel:
         self._build_display_options()
 
         self._radius = _FixedRadiusFrame(self.frame, model, status_sink)
-        self._radius.frame.pack(fill="x", pady=(8, 0))
+        self._radius.frame.pack(fill="x", pady=(theme.PAD_M, 0))
 
         self.model.add_listener(self._on_model_changed)
         self._on_model_changed()
@@ -77,25 +78,29 @@ class InputPanel:
     # -- widget construction -------------------------------------------------
 
     def _build_config_group(self, title: str, which: str) -> None:
-        group = ttk.LabelFrame(self.frame, text=title, padding=6)
-        group.pack(fill="x", pady=(0, 6))
+        group = ttk.LabelFrame(self.frame, text=title, padding=theme.PAD_M)
+        group.pack(fill="x", pady=(0, theme.PAD_M))
         labels = (("X [m]", "x"), ("Y [m]", "y"), ("Heading", "h"))
         for row, (label, field) in enumerate(labels):
-            ttk.Label(group, text=label).grid(row=row, column=0, sticky="w", padx=(0, 6))
+            ttk.Label(group, text=label).grid(
+                row=row, column=0, sticky="w", padx=theme.PAD_S, pady=theme.PAD_S
+            )
             key = f"{which}_{field}"
             entry = ttk.Entry(group, width=12)
-            entry.grid(row=row, column=1, sticky="ew", pady=1)
+            entry.grid(row=row, column=1, sticky="ew", padx=theme.PAD_S, pady=theme.PAD_S)
             entry.bind("<Return>", lambda _e, k=key: self._commit(k))
             entry.bind("<FocusOut>", lambda _e, k=key: self._commit(k))
             self._entries[key] = entry
         group.columnconfigure(1, weight=1)
 
     def _build_display_options(self) -> None:
-        options = ttk.LabelFrame(self.frame, text="Heading display", padding=6)
-        options.pack(fill="x", pady=(0, 6))
+        options = ttk.LabelFrame(self.frame, text="Heading display", padding=theme.PAD_M)
+        options.pack(fill="x", pady=(0, theme.PAD_M))
 
         self._conv_var = tk.StringVar(value=self.model.heading_convention.value)
-        ttk.Label(options, text="Convention:").grid(row=0, column=0, sticky="w")
+        ttk.Label(options, text="Convention:", style=theme.MUTED_LABEL).grid(
+            row=0, column=0, sticky="w", padx=theme.PAD_S, pady=theme.PAD_S
+        )
         for col, conv in enumerate(Convention, start=1):
             ttk.Radiobutton(
                 options,
@@ -103,10 +108,12 @@ class InputPanel:
                 value=conv.value,
                 variable=self._conv_var,
                 command=self._commit_convention,
-            ).grid(row=0, column=col, sticky="w", padx=2)
+            ).grid(row=0, column=col, sticky="w", padx=theme.PAD_S, pady=theme.PAD_S)
 
         self._unit_var = tk.StringVar(value=self.model.angle_unit.value)
-        ttk.Label(options, text="Unit:").grid(row=1, column=0, sticky="w")
+        ttk.Label(options, text="Unit:", style=theme.MUTED_LABEL).grid(
+            row=1, column=0, sticky="w", padx=theme.PAD_S, pady=theme.PAD_S
+        )
         for col, unit in enumerate(Unit, start=1):
             ttk.Radiobutton(
                 options,
@@ -114,7 +121,7 @@ class InputPanel:
                 value=unit.value,
                 variable=self._unit_var,
                 command=self._commit_unit,
-            ).grid(row=1, column=col, sticky="w", padx=2)
+            ).grid(row=1, column=col, sticky="w", padx=theme.PAD_S, pady=theme.PAD_S)
 
     # -- display <-> canonical conversion ------------------------------------
 
@@ -217,7 +224,7 @@ class _FixedRadiusFrame:
         self._status = status_sink
         self._refreshing = False
 
-        self.frame = ttk.LabelFrame(parent, text="Turn radius [m]", padding=6)
+        self.frame = ttk.LabelFrame(parent, text="Turn radius [m]", padding=theme.PAD_M)
 
         self._spinbox = ttk.Spinbox(
             self.frame,
@@ -226,7 +233,7 @@ class _FixedRadiusFrame:
             increment=0.5,
             command=self._on_spin,
         )
-        self._spinbox.grid(row=0, column=0, sticky="ew")
+        self._spinbox.grid(row=0, column=0, sticky="ew", padx=theme.PAD_S, pady=theme.PAD_S)
         self._spinbox.bind("<Return>", self._on_entry)
         self._spinbox.bind("<FocusOut>", self._on_entry)
 

@@ -16,6 +16,10 @@ from tkinter import ttk
 
 from dubins_demo.core.dubins import DubinsPath, Infeasible, PathType
 from dubins_demo.core.model import Scenario
+from dubins_demo.ui import theme
+
+#: Very light tint for zebra-striped odd rows; even rows use ``theme.SURFACE``.
+_STRIPE_ODD = "#f5f7fa"
 
 
 def _segments_text(path: DubinsPath) -> str:
@@ -41,11 +45,18 @@ class DetailsPanel:
         holds no reference to the callback.
         """
         self.model = model
-        self.frame = ttk.Frame(parent, padding=6)
+        self.frame = ttk.Frame(parent, padding=theme.PAD_L)
 
         self._refreshing = False
         self._sort_col = "length"
         self._sort_reverse = False
+
+        # A comfortable row height and tidy heading, layered on top of the app's
+        # theme. These are global "Treeview" style tweaks (not a full theme
+        # apply, which the app shell owns), so the table breathes a little more.
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=24)
+        style.configure("Treeview.Heading", anchor="w")
 
         columns = [name for name, _label, _w in self._COLUMNS]
         self._tree = ttk.Treeview(self.frame, columns=columns, show="headings", height=6)
@@ -53,7 +64,11 @@ class DetailsPanel:
             self._tree.heading(name, text=label, command=lambda c=name: self._sort_by(c))
             anchor = "w" if name == "segments" else "center"
             self._tree.column(name, width=width, anchor=anchor, stretch=(name == "segments"))
-        self._tree.tag_configure("infeasible", foreground="#909090")
+        # Subtle zebra striping; the infeasible tag only sets a foreground, so a
+        # stripe background still shows through on grayed-out rows.
+        self._tree.tag_configure("odd", background=_STRIPE_ODD)
+        self._tree.tag_configure("even", background=theme.SURFACE)
+        self._tree.tag_configure("infeasible", foreground=theme.MUTED)
 
         scrollbar = ttk.Scrollbar(self.frame, orient="vertical", command=self._tree.yview)
         self._tree.configure(yscrollcommand=scrollbar.set)
@@ -103,21 +118,27 @@ class DetailsPanel:
                     infeasible.append((path_type, solution))
 
             feasible.sort(key=self._sort_key, reverse=self._sort_reverse)
+            row = 0  # visual row index drives the zebra stripe across both groups
             for path_type, path in feasible:
+                stripe = "odd" if row % 2 else "even"
                 self._tree.insert(
                     "",
                     "end",
                     iid=path_type.name,
                     values=(path_type.value, f"{path.length:.2f}", _segments_text(path)),
+                    tags=(stripe,),
                 )
+                row += 1
             for path_type, reason in infeasible:
+                stripe = "odd" if row % 2 else "even"
                 self._tree.insert(
                     "",
                     "end",
                     iid=path_type.name,
                     values=(path_type.value, "—", reason.reason),
-                    tags=("infeasible",),
+                    tags=(stripe, "infeasible"),
                 )
+                row += 1
 
             highlighted = self.model.highlighted
             if highlighted is not None:

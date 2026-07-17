@@ -17,8 +17,6 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-import sv_ttk
-
 from dubins_demo.core.dubins import DubinsPath
 from dubins_demo.core.model import Scenario
 from dubins_demo.persistence.scenario_io import (
@@ -27,6 +25,7 @@ from dubins_demo.persistence.scenario_io import (
     load_scenario,
     save_scenario,
 )
+from dubins_demo.ui import theme
 from dubins_demo.ui.details_panel import DetailsPanel
 from dubins_demo.ui.input_panel import InputPanel
 from dubins_demo.ui.plot_canvas import PlotCanvas
@@ -44,6 +43,7 @@ class App:
         self.root = tk.Tk()
         self.root.title("Dubins Path Demonstrator")
         self.root.geometry("1100x720")
+        self.root.minsize(920, 600)
 
         self._status_var = tk.StringVar(value="Ready.")
 
@@ -53,7 +53,12 @@ class App:
         self.model.add_listener(self._on_model_changed)
         self._on_model_changed()
 
-        sv_ttk.set_theme("light")
+        # Apply the shared design system once, after every widget exists.
+        theme.apply_theme(self.root)
+        # sv_ttk.set_theme() recolors native menus from an idle callback, so a
+        # synchronous restyle here would be overwritten. Queue ours after_idle
+        # (FIFO) so it runs *after* sv_ttk's and wins the final word.
+        self.root.after_idle(self._style_menus)
 
     # -- layout --------------------------------------------------------------
 
@@ -61,39 +66,80 @@ class App:
         menubar = tk.Menu(self.root)
 
         self._file_menu = tk.Menu(menubar, tearoff=False)
-        self._file_menu.add_command(label="Save…", command=self._on_save)
-        self._file_menu.add_command(label="Load…", command=self._on_load)
-        self._file_menu.add_command(label=_EXPORT_LABEL, command=self._on_export_csv)
+        self._file_menu.add_command(
+            label="Save…", underline=0, accelerator="Ctrl+S", command=self._on_save
+        )
+        self._file_menu.add_command(
+            label="Load…", underline=0, accelerator="Ctrl+O", command=self._on_load
+        )
+        self._file_menu.add_command(
+            label=_EXPORT_LABEL, underline=0, accelerator="Ctrl+E", command=self._on_export_csv
+        )
         self._file_menu.add_separator()
-        self._file_menu.add_command(label="Exit", command=self.root.destroy)
-        menubar.add_cascade(label="File", menu=self._file_menu)
+        self._file_menu.add_command(
+            label="Exit", underline=1, accelerator="Ctrl+Q", command=self.root.destroy
+        )
+        menubar.add_cascade(label="File", underline=0, menu=self._file_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False)
-        help_menu.add_command(label="Open help page", command=self._on_help)
-        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(
+            label="Open help page", underline=0, accelerator="F1", command=self._on_help
+        )
+        menubar.add_cascade(label="Help", underline=0, menu=help_menu)
 
+        # Recolored after apply_theme(): sv_ttk.set_theme() rewrites menu colors,
+        # so styling them here would be clobbered. Held for _style_menus().
+        self._menus = (menubar, self._file_menu, help_menu)
+
+        self._bind_accelerators()
         self.root.config(menu=menubar)
 
+    def _style_menus(self) -> None:
+        """Apply the light menu palette; call *after* ``theme.apply_theme``."""
+        for menu in self._menus:
+            theme.style_menu(menu)
+
+    def _bind_accelerators(self) -> None:
+        """Wire the menu accelerators to root key bindings (both keypad cases)."""
+        bindings = {
+            "<Control-s>": self._on_save,
+            "<Control-o>": self._on_load,
+            "<Control-e>": self._on_export_csv,
+            "<Control-q>": lambda: self.root.destroy(),
+            "<F1>": self._on_help,
+        }
+        for sequence, handler in bindings.items():
+            self.root.bind_all(sequence, lambda _e, fn=handler: fn())
+
     def _build_layout(self) -> None:
+        # Content stretches in the plot column (1); the status bar sits below a
+        # thin divider (row 1), with the status label on the final row (row 2).
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(self.root)
-        left.grid(row=0, column=0, sticky="ns")
+        left = ttk.Frame(self.root, width=320)
+        left.grid(row=0, column=0, sticky="ns", padx=(theme.PAD_L, theme.PAD_M), pady=theme.PAD_L)
+        left.grid_propagate(False)
+        left.columnconfigure(0, weight=1)
         left.rowconfigure(1, weight=1)
 
         self.input_panel = InputPanel(left, self.model, self._set_status)
         self.input_panel.frame.grid(row=0, column=0, sticky="new")
         self.details_panel = DetailsPanel(left, self.model, self._set_status)
-        self.details_panel.frame.grid(row=1, column=0, sticky="nsew")
+        self.details_panel.frame.grid(row=1, column=0, sticky="nsew", pady=(theme.PAD_M, 0))
 
         self.plot_canvas = PlotCanvas(self.root, self.model, self._set_status)
-        self.plot_canvas.frame.grid(row=0, column=1, sticky="nsew")
+        self.plot_canvas.frame.grid(
+            row=0, column=1, sticky="nsew", padx=(0, theme.PAD_L), pady=theme.PAD_L
+        )
+
+        separator = ttk.Separator(self.root, orient="horizontal")
+        separator.grid(row=1, column=0, columnspan=2, sticky="ew")
 
         status = ttk.Label(
-            self.root, textvariable=self._status_var, relief="sunken", anchor="w", padding=(6, 2)
+            self.root, textvariable=self._status_var, style=theme.STATUS_LABEL, anchor="w"
         )
-        status.grid(row=1, column=0, columnspan=2, sticky="ew")
+        status.grid(row=2, column=0, columnspan=2, sticky="ew")
 
     # -- status sink ---------------------------------------------------------
 
