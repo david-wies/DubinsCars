@@ -1,0 +1,84 @@
+# Local + CI lint gate. Every hook here also runs in .github/workflows/ci.yml
+# via `pre-commit run --all-files` — keep the two in lockstep. If you add a
+# hook, it applies to both automatically; if you change a hook's config, no
+# separate CI edit is needed.
+#
+# Run locally:
+#   pip install -e ".[dev]"
+#   pre-commit install            # optional: run on every `git commit`
+#   pre-commit run --all-files    # run everything now, e.g. before pushing
+repos:
+  # --- Generic hygiene (whitespace, merge conflicts, large files, syntax) ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-toml
+      - id: check-json
+        exclude: \.vscode/.*\.json$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # --- Python: lint + format (ruff covers both, per NFR/dev-dep choice) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 2700fd5671c633760d912769c041bfcde2b9a01b # v0.15.22
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # --- TOML: pyproject.toml syntax + formatting ---
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: 23eab0f0eedcbedebff420f5fdfb284744adc7b3 # v0.9.3
+    hooks:
+      - id: taplo-format
+      - id: taplo-lint
+        # Override the hook's default --default-schema-catalogs: it fetches
+        # a remote JSON-schema catalog to validate against (e.g. Cargo.toml
+        # schemas) which is irrelevant here and was failing to parse against
+        # the pinned taplo version. Plain syntax/style linting is enough.
+        args: []
+
+  # --- YAML: GitHub Actions workflows, pre-commit config itself, etc. ---
+  - repo: https://github.com/adrienverge/yamllint
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530 # v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict, -c=.yamllint.yml]
+
+  # --- Markdown: docs/specs, docs/design, README ---
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: 06f92c99e930c11230426b5edd775021d25e08a8 # v0.23.1
+    hooks:
+      - id: markdownlint-cli2
+
+  # --- CSS: help/style.css (offline help page, hand-authored, no CDN) ---
+  - repo: https://github.com/thibaudcolas/pre-commit-stylelint
+    rev: 642dea0f17f1a98a93e104c0de51d70161b800c4 # v17.14.0
+    hooks:
+      - id: stylelint
+        files: \.css$
+        # No shareable config (e.g. stylelint-config-standard): stylelint
+        # v16+ resolves "extends" packages via ESM import, which ignores
+        # NODE_PATH — a shareable config installed only into pre-commit's
+        # node env (via additional_dependencies) can't be found. Our own
+        # flat rule set in .stylelintrc.json sidesteps that entirely.
+        additional_dependencies:
+          - stylelint@17.14.0
+
+  # --- HTML: help/index.html (no official pre-commit mirror; run htmlhint
+  # directly as a local node hook, pinned via additional_dependencies) ---
+  - repo: local
+    hooks:
+      - id: htmlhint
+        name: htmlhint
+        entry: htmlhint --config .htmlhintrc
+        language: node
+        additional_dependencies: [htmlhint@1.9.2]
+        files: \.html$

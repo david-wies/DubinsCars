@@ -1,0 +1,24 @@
+# Config for markdownlint-cli2 (docs/specs, docs/design, README.md).
+default: true
+
+# Spec/design docs use long prose lines and wide tables; wrapping them
+# is not worth the review noise.
+MD013: false
+
+# Same section title reused under different parents (e.g. "Testing" in
+# both the spec and the design doc) is fine; only flag duplicates at the
+# same nesting level.
+MD024:
+  siblings_only: true
+
+# Allow inline HTML (e.g. <br>, <details>) if a doc ever needs it.
+MD033: false
+
+# The design doc's directory-tree and data-flow diagrams are ASCII art in
+# bare fences, not source code — a "language" tag would be meaningless.
+MD040: false
+
+# Ordered lists may restart numbering per logical group (FR-1, FR-2, ... in
+# separate sub-sections) rather than strictly incrementing across the file.
+MD029:
+  style: ordered

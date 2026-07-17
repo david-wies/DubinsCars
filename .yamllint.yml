@@ -1,0 +1,17 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  document-start: disable
+  truthy:
+    # GitHub Actions' `on:` workflow key is not a boolean; don't flag keys.
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+
+ignore:
+  - .venv/
+  - dubins_demo.egg-info/
