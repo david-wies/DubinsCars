@@ -1,0 +1,357 @@
+/* Dubins Path Demonstrator — offline help stylesheet.
+   Self-contained: system font stacks only, no web fonts, no external assets. */
+
+:root {
+  --bg:        #ffffff;
+  --fg:        #1f2733;
+  --muted:     #5b6672;
+  --sidebar-bg:#f4f6f9;
+  --border:    #d9dee5;
+  --accent:    #1d63c4;
+  --accent-weak:#e7effb;
+  --code-bg:   #eef1f5;
+  --mark-bg:   #ffe58a;
+  --mark-fg:   #3a2f00;
+  --mark-cur:  #ff8a3d;
+  --mark-cur-fg:#2a1400;
+  --sidebar-w: 20rem;
+  --content-max: 46rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #12161c;
+    --fg:        #dfe5ec;
+    --muted:     #9aa5b1;
+    --sidebar-bg:#171d25;
+    --border:    #2b333d;
+    --accent:    #6ea8fe;
+    --accent-weak:#1c2a41;
+    --code-bg:   #1e252e;
+    --mark-bg:   #b9902a;
+    --mark-fg:   #1a1400;
+    --mark-cur:  #ff9d52;
+    --mark-cur-fg:#2a1400;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ---------- Sidebar ---------- */
+
+#sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 1rem 2rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+}
+
+.brand-mark {
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+/* ---------- Search ---------- */
+
+.search { margin-bottom: 1.25rem; }
+
+#search-box {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.95rem;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+#search-box:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.search-controls button {
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.3rem 0.5rem;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.search-controls button:hover {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+}
+
+#search-count {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Table of contents ---------- */
+
+.toc, .toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.toc > li { margin: 0.15rem 0; }
+
+.toc > li > a {
+  font-weight: 600;
+  display: block;
+  padding: 0.3rem 0.4rem;
+  border-radius: 5px;
+}
+
+.toc ol {
+  margin-left: 0.7rem;
+  border-left: 1px solid var(--border);
+  padding-left: 0.5rem;
+}
+
+.toc ol a {
+  font-weight: 400;
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: block;
+  padding: 0.2rem 0.4rem;
+  border-radius: 5px;
+}
+
+.toc a {
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.toc a:hover {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+/* ---------- Main content ---------- */
+
+#content {
+  margin-left: var(--sidebar-w);
+  padding: 2.5rem clamp(1.25rem, 4vw, 3.5rem) 4rem;
+  max-width: calc(var(--content-max) + var(--sidebar-w));
+}
+
+.page-head h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.9rem;
+  line-height: 1.2;
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: var(--content-max);
+}
+
+section { max-width: var(--content-max); }
+
+section > h2 {
+  margin-top: 2.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid var(--border);
+  font-size: 1.5rem;
+  scroll-margin-top: 1rem;
+}
+
+h3 {
+  margin-top: 1.9rem;
+  font-size: 1.15rem;
+  scroll-margin-top: 1rem;
+}
+
+p { max-width: var(--content-max); }
+
+ul, ol { max-width: var(--content-max); }
+
+li { margin: 0.25rem 0; }
+
+a { color: var(--accent); }
+
+kbd {
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82em;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  white-space: nowrap;
+}
+
+code {
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+/* ---------- Tables ---------- */
+
+.ref-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+.ref-table th, .ref-table td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ref-table thead th {
+  background: var(--accent-weak);
+}
+
+/* ---------- Formulas (MathML) ---------- */
+
+.formula-block {
+  overflow-x: auto;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  margin: 1rem 0;
+  max-width: var(--content-max);
+}
+
+.formula-block math { font-size: 1.05rem; }
+
+.formula-caption {
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+}
+
+math { font-size: 1.02em; }
+
+/* ---------- References ---------- */
+
+.references li { margin: 0.8rem 0; }
+
+.references .note {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.offline-note {
+  color: var(--muted);
+  font-size: 0.92rem;
+  border-left: 3px solid var(--accent);
+  padding-left: 0.8rem;
+  background: var(--accent-weak);
+  border-radius: 0 6px 6px 0;
+  padding: 0.6rem 0.9rem;
+}
+
+.page-foot {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ---------- Search highlights ---------- */
+
+mark.search-hit {
+  background: var(--mark-bg);
+  color: var(--mark-fg);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.search-hit.current {
+  background: var(--mark-cur);
+  color: var(--mark-cur-fg);
+  outline: 2px solid var(--mark-cur);
+  outline-offset: 1px;
+  scroll-margin-top: 2rem;
+}
+
+/* ---------- Accessibility helper ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+}
+
+/* ---------- Responsive: stack sidebar on narrow screens ---------- */
+
+@media (max-width: 52rem) {
+  #sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  #content {
+    margin-left: 0;
+    max-width: none;
+  }
+  #sidebar { max-height: 60vh; }
+}
