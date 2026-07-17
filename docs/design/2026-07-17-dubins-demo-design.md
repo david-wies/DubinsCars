@@ -278,7 +278,7 @@ Self-contained (inline CSS/JS, no CDN). Structure:
 ## 6. Error Handling Summary
 
 | Case | Behavior |
-|---|---|
+| --- | --- |
 | Non-numeric entry | Field red, status message, model unchanged (FR-23) |
 | Radius out of range | Clamped to slider range 0.1–50 |
 | CCC too far / inner tangent missing | `Infeasible(reason)`, grayed table row |
