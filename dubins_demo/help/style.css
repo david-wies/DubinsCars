@@ -295,7 +295,6 @@ math { font-size: 1.02em; }
   color: var(--muted);
   font-size: 0.92rem;
   border-left: 3px solid var(--accent);
-  padding-left: 0.8rem;
   background: var(--accent-weak);
   border-radius: 0 6px 6px 0;
   padding: 0.6rem 0.9rem;
@@ -346,6 +345,7 @@ mark.search-hit.current {
     position: static;
     width: auto;
     height: auto;
+    max-height: 60vh;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
@@ -353,5 +353,4 @@ mark.search-hit.current {
     margin-left: 0;
     max-width: none;
   }
-  #sidebar { max-height: 60vh; }
 }
