@@ -48,6 +48,8 @@ dmypy.json
 *.swp
 *.swo
 *~
+.zed/
+AGENTS.md
 
 # --- OS ---
 .DS_Store

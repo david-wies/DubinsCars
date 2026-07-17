@@ -136,4 +136,10 @@ class DetailsPanel:
             path_type = PathType[selection[0]]
         except KeyError:
             return
+        # Tk delivers <<TreeviewSelect>> asynchronously, so the selection_set()
+        # in _render() echoes back here after _refreshing has cleared. Bail when
+        # the row already matches the model to avoid an infinite update/notify
+        # loop (update() always notifies, even on a no-op change).
+        if path_type is self.model.highlighted:
+            return
         self.model.update(selected_type=path_type)
