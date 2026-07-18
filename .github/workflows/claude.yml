@@ -3,6 +3,10 @@ name: Claude Code
 # @claude mention bot. Responds when someone writes "@claude" in an issue,
 # a PR/issue comment, or a review. Distinct from claude-review.yml, which
 # auto-reviews every PR without being asked.
+#
+# No `concurrency` block on purpose (unlike claude-review.yml): each @claude
+# mention is an independent request, so cancel-in-progress would kill an
+# in-flight reply when a second mention lands. Let them run in parallel.
 on:
   issue_comment:
     types: [created]
@@ -36,6 +40,9 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
+          # This job only reads code; the action posts via its own app token.
+          # Don't leave the checkout token in .git/config for later steps.
+          persist-credentials: false
 
       - name: Run Claude Code
         id: claude
