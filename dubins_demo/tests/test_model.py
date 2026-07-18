@@ -31,6 +31,12 @@ def test_fixed_radius_is_a_policy() -> None:
     assert policy.min_radius() == 3.5
 
 
+def test_fixed_radius_rejects_non_positive_and_non_finite() -> None:
+    for bad in (0.0, -1.0, math.nan, math.inf):
+        with pytest.raises(ValueError, match="radius"):
+            FixedRadius(bad)
+
+
 def test_constructor_solves_immediately() -> None:
     scenario = _make_scenario()
     assert set(scenario.solutions) == set(PathType)
@@ -70,6 +76,23 @@ def test_animation_speed_is_not_settable_via_update() -> None:
         scenario.update(animation_speed=2.0)
 
 
+def test_update_with_invalid_field_mutates_nothing() -> None:
+    # A mix of one valid and one rejected key must leave the model untouched:
+    # no partial mutation, no re-solve, no notification (keys validated first).
+    scenario = _make_scenario()
+    solutions_before = scenario.solutions
+    circles_before = scenario.show_circles
+    calls = {"n": 0}
+    scenario.add_listener(lambda: calls.__setitem__("n", calls["n"] + 1))
+
+    with pytest.raises(AttributeError):
+        scenario.update(show_circles=not circles_before, animation_speed=2.0)
+
+    assert scenario.show_circles is circles_before
+    assert scenario.solutions is solutions_before  # no re-solve
+    assert calls["n"] == 0  # no notification
+
+
 def test_update_applies_changes_and_resolves() -> None:
     scenario = _make_scenario()
     scenario.update(radius_policy=FixedRadius(1.0), show_circles=True)
@@ -106,9 +129,18 @@ def test_unknown_field_rejected() -> None:
 
 
 def test_highlighted_none_when_all_infeasible() -> None:
-    scenario = _make_scenario()
-    # A non-positive radius makes every word infeasible, so nothing is highlighted.
-    scenario.update(radius_policy=FixedRadius(0.0))
+    # A non-positive radius makes every word infeasible, so nothing is
+    # highlighted. FixedRadius now rejects non-positive values, so drive the
+    # degenerate case through a bare RadiusPolicy stub that returns 0.
+    class _ZeroRadius:
+        def min_radius(self) -> float:
+            return 0.0
+
+    scenario = Scenario(
+        start=Config(0.0, 0.0, 0.0),
+        goal=Config(10.0, 5.0, math.pi / 2),
+        radius_policy=_ZeroRadius(),
+    )
     assert scenario.highlighted is None
     assert all(not isinstance(s, DubinsPath) for s in scenario.solutions.values())
 

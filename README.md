@@ -23,7 +23,7 @@ python -m dubins_demo     # launches the desktop app
 ```
 
 In the app: type start/goal configurations or drag the arrows on the plot
-(base to move, head to rotate), set the turn radius with the slider, and read
+(base to move, head to rotate), set the turn radius with the spinbox, and read
 every feasible path type in the details table. **File** saves/loads scenarios
 as JSON and exports the highlighted path's waypoints as CSV; **Help** opens the
 offline guide (usage + Dubins theory) in your browser.

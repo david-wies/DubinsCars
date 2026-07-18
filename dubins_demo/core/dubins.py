@@ -120,6 +120,12 @@ class DubinsPath:
     def __post_init__(self) -> None:
         if self.radius <= 0.0:
             raise ValueError(f"turn radius must be positive, got {self.radius!r}")
+        kinds = tuple(seg.kind for seg in self.segments)
+        if kinds != self.path_type.kinds:
+            raise ValueError(
+                f"segment kinds {tuple(k.value for k in kinds)} do not match "
+                f"the {self.path_type.value} word {tuple(k.value for k in self.path_type.kinds)}"
+            )
 
     @property
     def length(self) -> float:
@@ -135,6 +141,9 @@ class DubinsPath:
         total arc length (headings are normalized to ``[0, 2*pi)``). Tests rely
         on both properties.
         """
+        if not math.isfinite(step) or step <= 0.0:
+            raise ValueError(f"sample step must be a positive finite value, got {step!r}")
+
         # Precompute the entry configuration of each segment.
         starts: list[tuple[float, float, float]] = []
         cx, cy, ct = self.start.x, self.start.y, self.start.theta

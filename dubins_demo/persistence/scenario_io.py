@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,7 +132,11 @@ def _require_number(value: object, where: str) -> float:
     # bool is an int subclass; reject it so ``true``/``false`` are not coordinates.
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ScenarioError(f"{where} must be a number, got {type(value).__name__}")
-    return float(value)
+    number = float(value)
+    # ``json.loads`` accepts NaN/Infinity by default; those are never valid here.
+    if not math.isfinite(number):
+        raise ScenarioError(f"{where} must be a finite number, got {number!r}")
+    return number
 
 
 def _config_from_dict(value: object, where: str) -> Config:
@@ -151,7 +156,10 @@ def _radius_policy_from_dict(value: object) -> RadiusPolicy:
     value_num = _require_number(
         _require_key(mapping, "value", "radius_policy"), "radius_policy.value"
     )
-    return FixedRadius(value=value_num)
+    try:
+        return FixedRadius(value=value_num)
+    except ValueError as exc:
+        raise ScenarioError(f"invalid radius_policy.value: {exc}") from exc
 
 
 def _display_from_dict(value: object) -> tuple[Convention, Unit]:
@@ -184,7 +192,9 @@ def dict_to_scenario(data: object) -> LoadedScenario:
     mapping = _require_mapping(data, "scenario")
 
     version = _require_key(mapping, "version", "scenario")
-    if version != SCHEMA_VERSION:
+    # ``type(...) is int`` rejects ``True``/``False`` (bool == int subclass, and
+    # ``True == 1`` would otherwise sneak past the version gate).
+    if type(version) is not int or version != SCHEMA_VERSION:
         raise ScenarioError(
             f"unsupported scenario version {version!r} (this build reads version {SCHEMA_VERSION})"
         )
@@ -218,13 +228,16 @@ def save_scenario(scenario: Scenario, path: str | os.PathLike[str]) -> None:
 def load_scenario(path: str | os.PathLike[str]) -> LoadedScenario:
     """Read and validate a scenario file, returning a :class:`LoadedScenario`.
 
-    Malformed JSON and every schema violation are wrapped into
-    :class:`ScenarioError`. Filesystem problems (e.g. the file does not exist)
-    surface as the usual :class:`OSError` subclasses, since those are a
-    distinct concern from a bad-but-present scenario document.
+    Every failure mode is wrapped into a single :class:`ScenarioError`: an
+    unreadable file (:class:`OSError`), an undecodable byte stream
+    (:class:`UnicodeError`), malformed JSON, and every schema violation. Callers
+    handle exactly one exception type and can leave their live model untouched.
     """
     source = Path(path)
-    text = source.read_text(encoding="utf-8")  # OSError propagates intentionally
+    try:
+        text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ScenarioError(f"could not read scenario file {source}: {exc}") from exc
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:

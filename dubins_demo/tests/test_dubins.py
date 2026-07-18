@@ -276,9 +276,27 @@ def test_segment_rejects_negative_length() -> None:
 
 
 def test_dubins_path_rejects_non_positive_radius() -> None:
-    seg = Segment(SegmentKind.S, 1.0)
+    left = Segment(SegmentKind.L, 1.0)
+    straight = Segment(SegmentKind.S, 1.0)
     with pytest.raises(ValueError, match="radius"):
-        DubinsPath(PathType.LSL, (seg, seg, seg), 0.0, Config(0.0, 0.0, 0.0))
+        DubinsPath(PathType.LSL, (left, straight, left), 0.0, Config(0.0, 0.0, 0.0))
+
+
+def test_dubins_path_rejects_segments_inconsistent_with_word() -> None:
+    # An LSL path must spell L, S, L; three straights must be rejected.
+    straight = Segment(SegmentKind.S, 1.0)
+    with pytest.raises(ValueError, match="do not match"):
+        DubinsPath(PathType.LSL, (straight, straight, straight), 1.0, Config(0.0, 0.0, 0.0))
+
+
+def test_sample_rejects_non_positive_and_non_finite_step() -> None:
+    start = Config(0.0, 0.0, 0.0)
+    goal = Config(4.0, 0.0, 0.0)
+    path = solve_all(start, goal, 1.0)[PathType.LSL]
+    assert isinstance(path, DubinsPath)
+    for bad in (0.0, -0.05, math.nan, math.inf):
+        with pytest.raises(ValueError, match="step"):
+            path.sample(bad)
 
 
 # --- In-place U-turn (coincident position, reversed heading) -----------------

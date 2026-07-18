@@ -14,6 +14,7 @@ in-progress edit.
 
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import replace
@@ -165,6 +166,10 @@ class InputPanel:
             entry.state(["invalid"])
             self._status(f"{key.replace('_', ' ')}: not a number — value unchanged.")
             return
+        if not math.isfinite(raw):
+            entry.state(["invalid"])
+            self._status(f"{key.replace('_', ' ')}: must be finite — value unchanged.")
+            return
         entry.state(["!invalid"])
 
         which, field = self._FIELDS[key]
@@ -253,6 +258,10 @@ class _FixedRadiusFrame:
         except ValueError:
             self._spinbox.state(["invalid"])
             self._status("Turn radius: not a number — value unchanged.")
+            return
+        if not math.isfinite(value):
+            self._spinbox.state(["invalid"])
+            self._status("Turn radius: must be finite — value unchanged.")
             return
         self._spinbox.state(["!invalid"])
         self._apply(value)

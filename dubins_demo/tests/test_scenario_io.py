@@ -140,6 +140,16 @@ def test_wrong_version_raises(tmp_path: Path) -> None:
     assert "2" in str(excinfo.value)
 
 
+def test_bool_version_rejected() -> None:
+    # ``True == 1 == SCHEMA_VERSION`` must not sneak past the version gate.
+    document = scenario_to_dict(_make_scenario())
+    document["version"] = True
+
+    with pytest.raises(ScenarioError) as excinfo:
+        dict_to_scenario(document)
+    assert "version" in str(excinfo.value)
+
+
 def test_non_numeric_coordinate_raises() -> None:
     document = scenario_to_dict(_make_scenario())
     document["start"]["x"] = "not a number"
@@ -159,6 +169,24 @@ def test_bool_coordinate_rejected() -> None:
     assert "start.x" in str(excinfo.value)
 
 
+def test_non_finite_coordinate_rejected() -> None:
+    # json.loads accepts NaN/Infinity by default; they must never reach the core.
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        document = scenario_to_dict(_make_scenario())
+        document["goal"]["y"] = bad
+        with pytest.raises(ScenarioError) as excinfo:
+            dict_to_scenario(document)
+        assert "goal.y" in str(excinfo.value)
+
+
+def test_non_finite_or_non_positive_radius_rejected() -> None:
+    for bad in (0.0, -2.0, float("nan"), float("inf")):
+        document = scenario_to_dict(_make_scenario())
+        document["radius_policy"]["value"] = bad
+        with pytest.raises(ScenarioError):
+            dict_to_scenario(document)
+
+
 def test_scenario_to_dict_rejects_non_fixed_radius_policy() -> None:
     class _StubPolicy:
         def min_radius(self) -> float:
@@ -173,12 +201,22 @@ def test_scenario_to_dict_rejects_non_fixed_radius_policy() -> None:
         scenario_to_dict(scenario)
 
 
-def test_load_missing_file_raises_filenotfound_not_scenario_error(tmp_path: Path) -> None:
+def test_load_missing_file_raises_scenario_error(tmp_path: Path) -> None:
+    # Every load failure -- filesystem included -- surfaces as one ScenarioError
+    # so callers handle a single exception type (CLAUDE.md persistence contract).
     missing = tmp_path / "nope.json"
-    with pytest.raises(FileNotFoundError) as excinfo:
+    with pytest.raises(ScenarioError) as excinfo:
         load_scenario(missing)
-    # A missing file is a filesystem concern, distinct from a bad document.
-    assert not isinstance(excinfo.value, ScenarioError)
+    assert isinstance(excinfo.value.__cause__, FileNotFoundError)
+
+
+def test_load_undecodable_bytes_raises_scenario_error(tmp_path: Path) -> None:
+    # Invalid UTF-8 must not escape as a bare UnicodeDecodeError.
+    bad = tmp_path / "bad.json"
+    bad.write_bytes(b"\xff\xfe not utf-8")
+    with pytest.raises(ScenarioError) as excinfo:
+        load_scenario(bad)
+    assert isinstance(excinfo.value.__cause__, UnicodeError)
 
 
 def test_top_level_non_object_json_raises() -> None:

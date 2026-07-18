@@ -10,6 +10,7 @@ notification.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -41,6 +42,10 @@ class FixedRadius:
     """
 
     value: float
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.value) or self.value <= 0.0:
+            raise ValueError(f"turn radius must be a positive finite value, got {self.value!r}")
 
     def min_radius(self) -> float:
         """Return the fixed radius value."""
@@ -174,11 +179,14 @@ class Scenario:
 
         Only the settable input/display fields in :attr:`_SETTABLE` may be
         changed; the derived caches (``solutions``, ``highlighted``) and any
-        unknown name are rejected with :class:`AttributeError`.
+        unknown name are rejected with :class:`AttributeError`. Every key is
+        validated *before* any field is written, so a rejected call leaves the
+        model completely unmutated (no partial update, no stale caches).
         """
-        for name, value in changes.items():
+        for name in changes:
             if name not in self._SETTABLE:
                 raise AttributeError(f"unknown or read-only scenario field: {name!r}")
+        for name, value in changes.items():
             setattr(self, f"_{name}", value)
         self._resolve()
         self._notify()

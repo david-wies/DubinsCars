@@ -16,12 +16,13 @@ until these functions are called, keeping headless imports safe.
 
 from __future__ import annotations
 
-from tkinter import ttk
+from tkinter import Menu, ttk
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+    from matplotlib.legend import Legend
 
 # -- color palette (light mode, tuned to sv_ttk "light") ---------------------
 
@@ -72,7 +73,7 @@ def apply_theme(root: object) -> None:
     call-site clarity (and future per-root theming) though sv_ttk themes the
     default root.
     """
-    import sv_ttk
+    import sv_ttk  # pyright: ignore[reportMissingImports]  # no bundled type stubs
 
     sv_ttk.set_theme("light")
 
@@ -136,7 +137,7 @@ def style_axes(figure: Figure, ax: Axes) -> None:
         label.set_color(MUTED)
 
 
-def style_menu(menu: object) -> None:
+def style_menu(menu: Menu) -> None:
     """Recolor a ``tk.Menu`` to the light palette (sv_ttk leaves menus native).
 
     Tk draws the menubar and its dropdowns itself on X11, so — unlike ttk
@@ -156,7 +157,7 @@ def style_menu(menu: object) -> None:
     )
 
 
-def style_legend(legend: object) -> None:
+def style_legend(legend: Legend | None) -> None:
     """Give a matplotlib legend a light, low-chrome frame."""
     if legend is None:
         return

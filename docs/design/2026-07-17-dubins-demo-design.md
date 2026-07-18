@@ -184,8 +184,8 @@ passed to panels (avoids panels importing each other).
 - Radio buttons: heading convention (angle/azimuth) and unit (deg/rad). Switching
   re-formats the heading entries from the canonical model value — no cumulative
   round-trip drift.
-- Radius **sub-frame** (swappable per EXT-2): spinbox starting at `0.1`, bound
-  to `FixedRadius.value`.
+- Radius **sub-frame** (swappable per EXT-2): spinbox starting at `2.0` (minimum
+  `0.1`), bound to `FixedRadius.value`.
 - Entry validation on `<FocusOut>`/`<Return>`: parse → convert to canonical →
   `model.update()`. Parse failure: field turns red, status message, model untouched.
 - Panel listens to the model and rewrites entry text when the change originated
@@ -306,7 +306,7 @@ Self-contained (inline CSS/JS, no CDN). Structure:
 
 1. Type coordinates → plot updates; drag arrow → fields update.
 2. Toggle deg/rad and angle/azimuth repeatedly → values convert, no drift.
-3. Slider vs radius entry stay in sync; paths update live during slide.
+3. Spinbox vs radius entry stay in sync; paths update live during spin/type.
 4. Table sort, row click highlights; infeasible rows grayed with reason.
 5. Circles toggle; animation plays, pauses, resets on edit; speed change works.
 6. Save → load round-trip restores scenario exactly; CSV opens in spreadsheet.

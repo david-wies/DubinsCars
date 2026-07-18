@@ -21,7 +21,10 @@ from tkinter import ttk
 from typing import TYPE_CHECKING
 
 from matplotlib.animation import FuncAnimation
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import (
+    FigureCanvasTkAgg,
+    NavigationToolbar2Tk,  # pyright: ignore[reportPrivateImportUsage]  # public API; stub omits it
+)
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyArrow
@@ -148,11 +151,13 @@ class PlotCanvas:
         ).pack(side="left", padx=(0, theme.PAD_S))
 
     def _connect_events(self, canvas_widget: tk.Widget) -> None:
-        self.canvas.mpl_connect("button_press_event", self._on_press)
-        self.canvas.mpl_connect("motion_notify_event", self._on_motion)
-        self.canvas.mpl_connect("button_release_event", self._on_release)
+        # matplotlib types the callback as (Event) -> Any; our handlers narrow to
+        # MouseEvent (a subclass), which the stub rejects on contravariance.
+        self.canvas.mpl_connect("button_press_event", self._on_press)  # pyright: ignore[reportArgumentType]
+        self.canvas.mpl_connect("motion_notify_event", self._on_motion)  # pyright: ignore[reportArgumentType]
+        self.canvas.mpl_connect("button_release_event", self._on_release)  # pyright: ignore[reportArgumentType]
 
-        canvas_widget.configure(takefocus=True)
+        canvas_widget["takefocus"] = True
         canvas_widget.bind("<Left>", lambda _e: self._nudge(-_NUDGE_M, 0.0, 0.0))
         canvas_widget.bind("<Right>", lambda _e: self._nudge(_NUDGE_M, 0.0, 0.0))
         canvas_widget.bind("<Up>", lambda _e: self._nudge(0.0, _NUDGE_M, 0.0))
@@ -220,7 +225,7 @@ class PlotCanvas:
             self._draw_circles(radius)
 
         if self._selected is not None:
-            self._draw_selection(radius)
+            self._draw_selection(self._selected, radius)
 
         if self._path_lines:
             self._legend = self.ax.legend(
@@ -278,8 +283,8 @@ class PlotCanvas:
                 self.ax.add_patch(circle)
                 self._patches.append(circle)
 
-    def _draw_selection(self, radius: float) -> None:
-        cfg = getattr(self.model, self._selected)
+    def _draw_selection(self, name: str, radius: float) -> None:
+        cfg = getattr(self.model, name)
         length = self._arrow_length(radius)
         outline = Circle(
             (cfg.x, cfg.y),
@@ -400,19 +405,22 @@ class PlotCanvas:
 
     # -- animation -----------------------------------------------------------
 
-    def _commit_speed(self, _event: object = None) -> None:
+    def _commit_speed(self, _event: object = None) -> bool:
+        """Parse and store the playback speed; return whether it was valid."""
         try:
             speed = float(self._speed_var.get())
         except ValueError:
             self._status("Speed must be a number (m/s).")
-            return
-        if speed <= 0.0:
-            self._status("Speed must be positive.")
-            return
+            return False
+        # ``nan <= 0`` is False, so reject non-finite values explicitly.
+        if not math.isfinite(speed) or speed <= 0.0:
+            self._status("Speed must be a positive, finite number (m/s).")
+            return False
         # Speed is playback-only state: use the dedicated setter so it does not
         # re-solve or fire the notify that would stop a running animation.
         self.model.set_animation_speed(speed)
         self._speed_var.set(f"{speed:g}")
+        return True
 
     def _toggle_animation(self) -> None:
         if self._playing:
@@ -428,7 +436,8 @@ class PlotCanvas:
         solution = self.model.solutions[highlighted]
         if not isinstance(solution, DubinsPath):
             return
-        self._commit_speed()
+        if not self._commit_speed():
+            return
         speed = max(self.model.animation_speed, 1e-6)
         points = solution.sample(_ANIM_STEP)
         interval = max(10.0, (_ANIM_STEP / speed) * 1000.0)
@@ -447,14 +456,15 @@ class PlotCanvas:
         self.canvas.draw_idle()
 
     def _pause_animation(self) -> None:
-        if self._anim is not None:
+        if self._anim is not None and self._anim.event_source is not None:
             self._anim.event_source.stop()
         self._playing = False
         self._play_button.configure(text="▶")
 
     def _stop_animation(self) -> None:
         if self._anim is not None:
-            self._anim.event_source.stop()
+            if self._anim.event_source is not None:
+                self._anim.event_source.stop()
             self._anim = None
         self._anim_points = None
         self._playing = False
@@ -477,5 +487,6 @@ class PlotCanvas:
             )
         else:
             self._marker.set_data([x], [y])
-            self._marker.set_marker(marker)
+            # (numsides, style, angle) tuple is a valid marker but absent from MarkerType.
+            self._marker.set_marker(marker)  # pyright: ignore[reportArgumentType]
         return (self._marker,)
