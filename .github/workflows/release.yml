@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Cancel superseded runs for the same tag (e.g. a force-pushed tag re-push).
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege default; the release job elevates to contents: write itself.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: build + publish GitHub release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create the release and upload assets
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Install build backend
+        run: pip install build
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: dist/*
+          generate_release_notes: true

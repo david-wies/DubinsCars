@@ -7,10 +7,31 @@ name = "dubins-demo"
 version = "0.1.0"
 description = "Desktop app to compute and demonstrate Dubins paths (Tkinter + matplotlib + numpy)."
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "David Wies" }]
+keywords = ["dubins", "path-planning", "robotics", "motion-planning", "tkinter"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Education",
+  "Operating System :: OS Independent",
+  "Environment :: X11 Applications",
+  "Environment :: Win32 (MS Windows)",
+  "Environment :: MacOS X",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering",
+]
 dependencies = ["numpy", "matplotlib", "sv-ttk"]
+
+[project.urls]
+Homepage = "https://github.com/david-wies/DubinsCars"
+Repository = "https://github.com/david-wies/DubinsCars"
+Issues = "https://github.com/david-wies/DubinsCars/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.15", "pre-commit>=4", "pyright>=1.1.411"]
@@ -27,7 +48,7 @@ include = ["dubins_demo*"]
 "dubins_demo" = ["help/*.html", "help/*.css"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 100
 src = ["dubins_demo"]
 
@@ -54,7 +75,7 @@ quote-style = "double"
 
 [tool.pyright]
 include = ["dubins_demo"]
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]

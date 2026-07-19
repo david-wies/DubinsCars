@@ -1,15 +1,36 @@
 # Dubins Path Demonstrator
 
+[![CI](https://github.com/david-wies/DubinsCars/actions/workflows/ci.yml/badge.svg)](https://github.com/david-wies/DubinsCars/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 A desktop application (Python + Tkinter + matplotlib + numpy) that computes and
 demonstrates **Dubins paths** — the shortest curvature-constrained paths between
 two oriented configurations in the plane. It's both a practical calculator and a
 teaching tool: it shows *all* candidate path types (LSL, RSR, LSR, RSL, RLR, LRL),
 their construction, and the math behind them.
 
-## Running the app
+## Quick start
 
-Requires Python >= 3.10 with Tkinter (bundled with the standard CPython
-installers on Windows and macOS; on Debian/Ubuntu install `python3-tk`).
+This is an application, not a library — clone it and run. The launcher script
+creates a local virtualenv, installs the app into it, and starts the GUI (first
+run only takes a moment; later runs launch instantly):
+
+```bash
+git clone https://github.com/david-wies/DubinsCars.git
+cd DubinsCars
+./run.sh          # Linux/macOS
+```
+
+On Windows (PowerShell), run `./run.ps1` instead.
+
+Requires Python >= 3.12 with Tkinter (bundled with the standard CPython
+installers on Windows and macOS; on Debian/Ubuntu install it with
+`sudo apt install python3-tk`).
+
+## Running the app manually
+
+If you prefer to manage the environment yourself:
 
 ```bash
 python -m venv .venv
@@ -38,7 +59,7 @@ offline guide (usage + Dubins theory) in your browser.
 
 ## Development
 
-Requires Python >= 3.10.
+Requires Python >= 3.12.
 
 ```bash
 python -m venv .venv
@@ -66,3 +87,7 @@ CI (`.github/workflows/ci.yml`) runs the exact same `pre-commit` hooks plus
 
 Install the dev extras (`pip install -e ".[dev]"`) to get `pytest`, `ruff`,
 and `pre-commit`.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
