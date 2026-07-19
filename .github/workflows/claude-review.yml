@@ -3,7 +3,7 @@ name: Claude Review
 on:
   pull_request:
     types: [opened, synchronize]
-    branches: [master]
+    branches: [main]
 
 # Cancel superseded reviews on the same ref (e.g. new push to a PR).
 concurrency:
