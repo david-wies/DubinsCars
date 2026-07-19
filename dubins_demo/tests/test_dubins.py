@@ -427,6 +427,37 @@ def test_in_place_uturn_is_a_feasible_ccc_maneuver() -> None:
         assert path.length > 0.0
 
 
+@pytest.mark.parametrize("scenario", _random_scenarios(4242, 400))
+def test_lsl_rsr_always_feasible(scenario: tuple[Config, Config, float]) -> None:
+    # The outer tangent always exists, so LSL and RSR are feasible for every
+    # scenario (their p_sq is algebraically a sum of squares). Guards against a
+    # rounding-induced tiny-negative p_sq being reported as false infeasibility.
+    start, goal, radius = scenario
+    sols = solve_all(start, goal, radius)
+    assert isinstance(sols[PathType.LSL], DubinsPath)
+    assert isinstance(sols[PathType.RSR], DubinsPath)
+
+
+def test_lsl_feasible_when_left_circles_coincide() -> None:
+    # Goal reachable from the start by a pure left arc: the two left turning
+    # circles coincide, so the LSL straight run collapses to ~0 and p_sq sits on
+    # the floating-point boundary. LSL must stay feasible with a ~0 middle
+    # segment (regression: false "outer tangent does not exist").
+    radius = 2.0
+    start = Config(0.0, 0.0, 0.0)
+    phi = 1.0  # sweep a left arc by 1 rad to land the goal on the same circle
+    cx, cy = 0.0, radius  # left turning-circle center for heading 0
+    goal = Config(cx + radius * math.sin(phi), cy - radius * math.cos(phi), normalize(phi))
+    sols = solve_all(start, goal, radius)
+    lsl = sols[PathType.LSL]
+    assert isinstance(lsl, DubinsPath)
+    assert lsl.segments[1].length == pytest.approx(0.0, abs=1e-6)
+    end = lsl.sample(0.01)[-1]
+    assert end[0] == pytest.approx(goal.x, abs=1e-6)
+    assert end[1] == pytest.approx(goal.y, abs=1e-6)
+    assert _angle_diff(end[2], normalize(goal.theta)) < 1e-6
+
+
 # --- Independent geometric length oracles ------------------------------------
 # The endpoint tests above prove each path *reaches* the goal, but an arc length
 # wrong by a multiple of 2*pi*r would land on the same endpoint. These cross-

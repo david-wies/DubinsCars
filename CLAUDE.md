@@ -18,7 +18,7 @@ Desktop app (Python + Tkinter + matplotlib + numpy) that computes and demonstrat
 .venv/bin/pre-commit run --all-files   # full lint/format/type gate (ruff + pyright + taplo + yamllint + markdownlint + stylelint + htmlhint)
 ```
 
-CI (`.github/workflows/ci.yml`) runs the **exact same** `pre-commit` hooks plus `pytest` (on py3.10/3.11/3.12). Local and CI never drift — change a hook once in `.pre-commit-config.yaml`. CI and the remote default branch are both `main` (`master` has been retired).
+CI (`.github/workflows/ci.yml`) runs the **exact same** `pre-commit` hooks plus `pytest` (on py3.12/3.13/3.14). Local and CI never drift — change a hook once in `.pre-commit-config.yaml`. CI and the remote default branch are both `main` (`master` has been retired).
 
 ## Architecture
 

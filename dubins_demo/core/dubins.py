@@ -200,24 +200,27 @@ class DubinsPath:
 
 def _lsl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | None:
     tmp0 = d + math.sin(alpha) - math.sin(beta)
+    # p_sq is algebraically (d + sin a - sin b)^2 + (cos b - cos a)^2, a sum of
+    # squares, so the outer tangent always exists (LSL is feasible for every
+    # scenario). Computed in expanded form it can round to a tiny negative when
+    # the start/goal left circles nearly coincide (p ~ 0); clamp to 0 rather
+    # than reporting a false infeasibility.
     p_sq = 2 + d * d - 2 * math.cos(alpha - beta) + 2 * d * (math.sin(alpha) - math.sin(beta))
-    if p_sq < 0:
-        return None
     tmp1 = math.atan2(math.cos(beta) - math.cos(alpha), tmp0)
     t = normalize(-alpha + tmp1)
-    p = math.sqrt(p_sq)
+    p = math.sqrt(max(0.0, p_sq))
     q = normalize(beta - tmp1)
     return t, p, q
 
 
 def _rsr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | None:
     tmp0 = d - math.sin(alpha) + math.sin(beta)
+    # See _lsl: p_sq is a sum of squares, so RSR is always feasible; clamp a
+    # rounding-induced tiny negative to 0 instead of returning None.
     p_sq = 2 + d * d - 2 * math.cos(alpha - beta) + 2 * d * (math.sin(beta) - math.sin(alpha))
-    if p_sq < 0:
-        return None
     tmp1 = math.atan2(math.cos(alpha) - math.cos(beta), tmp0)
     t = normalize(alpha - tmp1)
-    p = math.sqrt(p_sq)
+    p = math.sqrt(max(0.0, p_sq))
     q = normalize(-beta + tmp1)
     return t, p, q
 
