@@ -430,6 +430,14 @@ class PlotCanvas:
         # re-solve or fire the notify that would stop a running animation.
         self.model.set_animation_speed(speed)
         self._speed_var.set(f"{speed:g}")
+        # Apply the new speed live: rebuild the running animation so its
+        # interval is recomputed. _start_animation preserves _frame, so the
+        # marker keeps its position rather than jumping back to the start.
+        # Clear _playing first so the re-entrant _commit_speed inside
+        # _start_animation does not recurse; _start_animation re-sets it.
+        if self._playing:
+            self._playing = False
+            self._start_animation()
         return True
 
     def _toggle_animation(self) -> None:
@@ -456,6 +464,13 @@ class PlotCanvas:
         # _stop_animation, which has already reset _frame to 0. Guard the index
         # in case the (re-sampled) path is shorter than the preserved frame.
         self._frame %= len(points)
+        # Discard any prior animation (a paused instance, or the one being
+        # replaced by a live speed change) so a stale event source can never
+        # keep ticking alongside the new one.
+        if self._anim is not None:
+            if self._anim.event_source is not None:
+                self._anim.event_source.stop()
+            self._anim = None
         self._anim = FuncAnimation(
             self.figure,
             self._animate,

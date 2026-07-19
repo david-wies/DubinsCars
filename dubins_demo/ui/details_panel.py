@@ -164,6 +164,11 @@ class DetailsPanel:
             # _render(), so the lookup always succeeds. Guarded defensively so a
             # stray selection can never raise out of the Tk callback.
             return
+        # Selecting is meaningful only for feasible words: an infeasible row has
+        # no path to highlight, and retaining it as selected_type would silently
+        # auto-highlight later if an edit makes that word feasible. Ignore it.
+        if not isinstance(self.model.solutions.get(path_type), DubinsPath):
+            return
         # Tk delivers <<TreeviewSelect>> asynchronously, so the selection_set()
         # in _render() echoes back here after _refreshing has cleared. Bail when
         # the row already matches the model to avoid an infinite update/notify
