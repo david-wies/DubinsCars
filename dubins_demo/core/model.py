@@ -137,6 +137,16 @@ class Scenario:
         show_circles: bool = False,
         animation_speed: float = 1.0,
     ) -> None:
+        # Validate through the same per-field predicates that guard update(), so
+        # an invalid Scenario cannot be constructed (illegal state would only
+        # surface later inside _resolve as an obscure AttributeError otherwise).
+        _validate_settable("start", start)
+        _validate_settable("goal", goal)
+        _validate_settable("radius_policy", radius_policy)
+        _validate_settable("heading_convention", heading_convention)
+        _validate_settable("angle_unit", angle_unit)
+        _validate_settable("selected_type", selected_type)
+        _validate_settable("show_circles", show_circles)
         self._start = start
         self._goal = goal
         self._radius_policy = radius_policy
@@ -193,7 +203,7 @@ class Scenario:
 
     @property
     def animation_speed(self) -> float:
-        """The animation speed in m/s (set via :meth:`update`)."""
+        """The animation speed in m/s (set via :meth:`set_animation_speed`)."""
         return self._animation_speed
 
     @property
