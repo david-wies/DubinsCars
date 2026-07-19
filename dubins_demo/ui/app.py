@@ -52,6 +52,7 @@ class App:
         self._build_layout()
 
         self.model.add_listener(self._on_model_changed)
+        self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
 
         # Apply the shared design system once, after every widget exists.
@@ -147,6 +148,18 @@ class App:
     def _set_status(self, message: str) -> None:
         self._status_var.set(message)
 
+    def _on_listener_error(self, exc: BaseException) -> None:
+        """Surface a view-refresh failure the model would otherwise swallow.
+
+        Registered with :meth:`Scenario.set_error_handler`, so a panel that
+        raises while re-reading the model no longer fails invisibly: the status
+        bar flags it and a dialog carries the detail, matching how load/save
+        errors are shown. Other panels are still refreshed (the model isolates
+        each listener); this only reports the one that broke.
+        """
+        self._set_status("A panel failed to refresh — see the error dialog.")
+        messagebox.showerror("Panel refresh failed", str(exc))
+
     def _on_model_changed(self) -> None:
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
@@ -190,7 +203,14 @@ class App:
             messagebox.showerror("Load failed", str(exc))
             return
         self.model.update(**loaded.to_update_kwargs())
-        self._set_status(f"Loaded scenario from {path}")
+        # update() has already fired _on_model_changed, which sets the
+        # infeasibility notice for an unsolvable scenario. Overwriting it with a
+        # bare success line would hide that the loaded file has no path, so
+        # qualify the status when nothing is feasible.
+        if self.model.highlighted is None:
+            self._set_status(f"Loaded {path} — no feasible Dubins path for this scenario.")
+        else:
+            self._set_status(f"Loaded scenario from {path}")
 
     def _on_export_csv(self) -> None:
         highlighted = self.model.highlighted

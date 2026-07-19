@@ -151,6 +151,7 @@ class Scenario:
         self._animation_speed = _validate_animation_speed(animation_speed)
 
         self._listeners: list[Callable[[], None]] = []
+        self._error_handler: Callable[[BaseException], None] | None = None
         self._solutions: dict[PathType, DubinsPath | Infeasible] = {}
         self._solutions_view: Mapping[PathType, DubinsPath | Infeasible] = MappingProxyType(
             self._solutions
@@ -222,6 +223,20 @@ class Scenario:
         """Register a zero-argument callback fired after each :meth:`update`."""
         self._listeners.append(cb)
 
+    def set_error_handler(self, handler: Callable[[BaseException], None] | None) -> None:
+        """Register a callback invoked when a listener raises during notify.
+
+        The handler lets a UI layer surface an otherwise-swallowed listener crash
+        to the user (status bar / dialog) without ``core`` importing any UI code:
+        it receives the raised exception and returns nothing. Pass ``None`` to
+        clear it and fall back to the stderr traceback (headless/tests).
+
+        Per-listener isolation is unchanged -- a raising listener still never
+        strands the remaining listeners, and a handler that itself raises is
+        swallowed rather than propagated (see :meth:`_notify`).
+        """
+        self._error_handler = handler
+
     def update(self, **changes: object) -> None:
         """Apply field changes, re-solve, then notify all listeners exactly once.
 
@@ -267,11 +282,28 @@ class Scenario:
     def _notify(self) -> None:
         # Isolate listeners: one raising view must not strand the others
         # half-refreshed, nor let its exception escape update() past the point
-        # where the model has already re-solved. There is no logging framework
-        # here and core/ must stay UI-free (no messagebox), so a best-effort
-        # stderr traceback is the trace we leave -- swallowed, never re-raised.
+        # where the model has already re-solved. A registered error handler
+        # (set by the UI) surfaces the failure to the user; with none registered
+        # -- headless runs and tests -- fall back to a best-effort stderr
+        # traceback. Either way the exception is swallowed, never re-raised.
         for cb in self._listeners:
             try:
                 cb()
-            except Exception:  # noqa: BLE001 - deliberate per-listener isolation
-                traceback.print_exc()
+            except Exception as exc:  # noqa: BLE001 - deliberate per-listener isolation
+                self._report_listener_error(exc)
+
+    def _report_listener_error(self, exc: BaseException) -> None:
+        """Route a swallowed listener error to the handler, else to stderr.
+
+        A handler that itself raises must not defeat the per-listener isolation
+        it exists to serve, so its own failure is swallowed to stderr rather
+        than propagated back into the notify loop.
+        """
+        handler = self._error_handler
+        if handler is None:
+            traceback.print_exc()
+            return
+        try:
+            handler(exc)
+        except Exception:  # noqa: BLE001 - a broken handler must not strand listeners
+            traceback.print_exc()

@@ -304,24 +304,32 @@ def _solve_one(
     try:
         alpha, beta, d = _canonical_frame(start, goal, radius)
         result = solver(alpha, beta, d)
+        # A ``None`` result is legitimate geometric infeasibility, not an error;
+        # return the normal reason before any construction that could raise.
+        if result is None:
+            return Infeasible(path_type, default_reason)
+        t, p, q = result
+        k0, k1, k2 = path_type.kinds
+        # Segment/DubinsPath __post_init__ enforce finiteness/non-negativity and
+        # word-kind agreement; their construction stays inside this try so a
+        # ValueError from those guards is caught by the INTERNAL net below rather
+        # than escaping (it would otherwise propagate through solve_all into a
+        # Tk callback).
+        segments = (
+            Segment(k0, t * radius),
+            Segment(k1, p * radius),
+            Segment(k2, q * radius),
+        )
+        return DubinsPath(path_type=path_type, segments=segments, radius=radius, start=start)
     except ValueError as exc:
         # A ValueError here is not legitimate geometric infeasibility (that is
-        # signalled by a ``None`` return); it means an unexpected internal error
-        # slipped past the closed-form guards. Surface it distinctly rather than
-        # letting it raise, preserving FR-8/FR-24 (solvers must not raise).
-        # ZeroDivisionError is intentionally not caught: solve_all guards
-        # radius > 0, so it cannot occur; let it surface if it ever does.
+        # signalled by the ``None`` return above); it means an unexpected
+        # internal error slipped past the closed-form guards. Surface it
+        # distinctly rather than letting it raise, preserving FR-8/FR-24
+        # (solvers must not raise). ZeroDivisionError is intentionally not
+        # caught: solve_all guards radius > 0, so it cannot occur; let it
+        # surface if it ever does.
         return Infeasible(path_type, f"INTERNAL: unexpected {type(exc).__name__}: {exc}")
-    if result is None:
-        return Infeasible(path_type, default_reason)
-    t, p, q = result
-    k0, k1, k2 = path_type.kinds
-    segments = (
-        Segment(k0, t * radius),
-        Segment(k1, p * radius),
-        Segment(k2, q * radius),
-    )
-    return DubinsPath(path_type=path_type, segments=segments, radius=radius, start=start)
 
 
 def solve_all(

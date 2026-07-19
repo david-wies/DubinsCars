@@ -267,6 +267,63 @@ def test_notify_isolates_failing_listener(capsys: pytest.CaptureFixture[str]) ->
     assert "RuntimeError" in capsys.readouterr().err
 
 
+def test_notify_error_handler_receives_failure_and_others_still_run() -> None:
+    # A registered error handler surfaces a swallowed listener crash while the
+    # per-listener isolation is preserved: the later listener still fires and
+    # the handler is called with the raised exception.
+    scenario = _make_scenario()
+    fired = {"second": 0}
+    seen: list[BaseException] = []
+
+    boom_error = RuntimeError("view blew up")
+
+    def boom() -> None:
+        raise boom_error
+
+    scenario.set_error_handler(seen.append)
+    scenario.add_listener(boom)
+    scenario.add_listener(lambda: fired.__setitem__("second", fired["second"] + 1))
+
+    scenario.update(goal=Config(8.0, -3.0, 0.0))
+
+    assert fired["second"] == 1  # later listener still ran
+    assert seen == [boom_error]  # handler received the exact exception
+
+
+def test_notify_falls_back_to_stderr_without_handler(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # With no handler registered, a raising listener falls back to a stderr
+    # traceback and does not propagate out of update().
+    scenario = _make_scenario()
+
+    scenario.add_listener(lambda: (_ for _ in ()).throw(RuntimeError("view blew up")))
+    scenario.update(goal=Config(8.0, -3.0, 0.0))  # must not raise
+
+    assert "RuntimeError" in capsys.readouterr().err
+
+
+def test_notify_raising_error_handler_does_not_propagate(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A handler that itself raises must not defeat the isolation it serves:
+    # its failure is swallowed to stderr and the remaining listeners still run.
+    scenario = _make_scenario()
+    fired = {"second": 0}
+
+    def bad_handler(_exc: BaseException) -> None:
+        raise ValueError("handler blew up")
+
+    scenario.set_error_handler(bad_handler)
+    scenario.add_listener(lambda: (_ for _ in ()).throw(RuntimeError("view blew up")))
+    scenario.add_listener(lambda: fired.__setitem__("second", fired["second"] + 1))
+
+    scenario.update(goal=Config(8.0, -3.0, 0.0))  # must not raise
+
+    assert fired["second"] == 1  # isolation preserved despite the broken handler
+    assert "ValueError" in capsys.readouterr().err
+
+
 def test_update_solves_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
     scenario = _make_scenario()
     count = {"n": 0}

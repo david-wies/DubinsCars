@@ -8,6 +8,7 @@ import random
 import numpy as np
 import pytest
 
+from dubins_demo.core import dubins
 from dubins_demo.core.angles import normalize
 from dubins_demo.core.dubins import (
     Config,
@@ -77,6 +78,31 @@ def test_non_finite_radius_is_clean_infeasible(radius: float) -> None:
     for s in sols.values():
         assert isinstance(s, Infeasible)
         assert not s.reason.startswith("INTERNAL")
+
+
+def test_solver_returning_bad_segment_is_clean_internal_infeasible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # FR-8/FR-24 safety net: if a (hypothetically broken) closed-form solver
+    # returns values that violate the Segment/DubinsPath __post_init__ guards
+    # (here a negative length), _solve_one must convert the resulting ValueError
+    # into a clean Infeasible with an "INTERNAL:" reason -- never let it raise
+    # and escape solve_all into a Tk callback.
+    def _bad_solver(alpha: float, beta: float, d: float) -> tuple[float, float, float]:
+        return (-1.0, 0.0, 0.0)  # negative t -> Segment(length < 0) raises ValueError
+
+    monkeypatch.setitem(dubins._SOLVERS, PathType.LSL, (_bad_solver, "unused"))
+
+    result = dubins._solve_one(PathType.LSL, Config(0, 0, 0), Config(3, 4, 1.0), 1.0)
+    assert isinstance(result, Infeasible)
+    assert result.reason.startswith("INTERNAL")
+    assert result.reason.startswith("INTERNAL: unexpected ValueError")
+
+    # solve_all must not raise either, and only the patched word is INTERNAL.
+    sols = solve_all(Config(0, 0, 0), Config(3, 4, 1.0), 1.0)
+    lsl = sols[PathType.LSL]
+    assert isinstance(lsl, Infeasible)
+    assert lsl.reason.startswith("INTERNAL")
 
 
 # --- Endpoint property: the correctness oracle ------------------------------
