@@ -217,12 +217,26 @@ def dict_to_scenario(data: object) -> LoadedScenario:
 
 
 def save_scenario(scenario: Scenario, path: str | os.PathLike[str]) -> None:
-    """Write ``scenario`` to ``path`` as pretty-printed (indent=2) UTF-8 JSON."""
+    """Write ``scenario`` to ``path`` as pretty-printed (indent=2) UTF-8 JSON.
+
+    The write is atomic: the document is streamed to a sibling ``.tmp`` file in
+    the same directory and then :func:`os.replace`-d onto ``path`` (atomic on
+    POSIX and Windows). A mid-write failure therefore never truncates a
+    previously-good file, and no stray temp file is left behind -- both the
+    serialization step (which happens first) and any I/O failure surface as a
+    single :class:`ScenarioError`.
+    """
     document = scenario_to_dict(scenario)
     target = Path(path)
-    with target.open("w", encoding="utf-8") as fh:
-        json.dump(document, fh, indent=2)
-        fh.write("\n")  # POSIX-friendly trailing newline
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(document, fh, indent=2)
+            fh.write("\n")  # POSIX-friendly trailing newline
+        os.replace(tmp, target)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise ScenarioError(f"could not write scenario file {target}: {exc}") from exc
 
 
 def load_scenario(path: str | os.PathLike[str]) -> LoadedScenario:

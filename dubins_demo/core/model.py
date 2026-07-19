@@ -11,9 +11,10 @@ notification.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Protocol, runtime_checkable
 
 from dubins_demo.core.dubins import (
@@ -66,6 +67,40 @@ class Unit(Enum):
     RAD = "rad"
 
 
+def _validate_animation_speed(value: float) -> float:
+    """Return *value* if it is a non-negative finite speed, else raise ValueError."""
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"animation speed must be a non-negative finite value, got {value!r}")
+    return value
+
+
+#: Per-field type predicates for :func:`_validate_settable`, keyed by the same
+#: names as :attr:`Scenario._SETTABLE`. Each maps to ``(predicate, expected)``.
+#: ``RadiusPolicy`` is ``runtime_checkable``, so ``isinstance`` verifies the
+#: ``min_radius`` protocol; ``selected_type`` also admits ``None``.
+_SETTABLE_TYPES: dict[str, tuple[Callable[[object], bool], str]] = {
+    "start": (lambda v: isinstance(v, Config), "a Config"),
+    "goal": (lambda v: isinstance(v, Config), "a Config"),
+    "radius_policy": (lambda v: isinstance(v, RadiusPolicy), "a RadiusPolicy"),
+    "heading_convention": (lambda v: isinstance(v, Convention), "a Convention"),
+    "angle_unit": (lambda v: isinstance(v, Unit), "a Unit"),
+    "selected_type": (lambda v: v is None or isinstance(v, PathType), "a PathType or None"),
+    "show_circles": (lambda v: isinstance(v, bool), "a bool"),
+}
+
+
+def _validate_settable(name: str, value: object) -> None:
+    """Reject an ill-typed value for a settable :class:`Scenario` field.
+
+    A conservative per-field type check so a bad :meth:`Scenario.update` call
+    fails up front rather than corrupting the model or surfacing later inside
+    ``_resolve`` (or silently). Raises :class:`TypeError` on a mismatch.
+    """
+    predicate, expected = _SETTABLE_TYPES[name]
+    if not predicate(value):
+        raise TypeError(f"{name} must be {expected}, got {type(value).__name__}")
+
+
 class Scenario:
     """Observable scenario state with cached Dubins solutions.
 
@@ -109,10 +144,13 @@ class Scenario:
         self._angle_unit = angle_unit
         self._selected_type = selected_type
         self._show_circles = show_circles
-        self._animation_speed = animation_speed
+        self._animation_speed = _validate_animation_speed(animation_speed)
 
         self._listeners: list[Callable[[], None]] = []
         self._solutions: dict[PathType, DubinsPath | Infeasible] = {}
+        self._solutions_view: Mapping[PathType, DubinsPath | Infeasible] = MappingProxyType(
+            self._solutions
+        )
         self._highlighted: PathType | None = None
         self._resolve()  # valid solutions/highlighted immediately after construction
 
@@ -159,9 +197,15 @@ class Scenario:
         return self._animation_speed
 
     @property
-    def solutions(self) -> dict[PathType, DubinsPath | Infeasible]:
-        """The cached per-word solver results (recomputed by :meth:`update`)."""
-        return self._solutions
+    def solutions(self) -> Mapping[PathType, DubinsPath | Infeasible]:
+        """The cached per-word solver results (recomputed by :meth:`update`).
+
+        Returned as a read-only view so callers cannot mutate the cache and
+        corrupt model state; :meth:`update` replaces it wholesale on each solve.
+        The view's identity is stable between solves, so ``is`` comparisons
+        still detect whether a re-solve has happened.
+        """
+        return self._solutions_view
 
     @property
     def highlighted(self) -> PathType | None:
@@ -179,13 +223,15 @@ class Scenario:
 
         Only the settable input/display fields in :attr:`_SETTABLE` may be
         changed; the derived caches (``solutions``, ``highlighted``) and any
-        unknown name are rejected with :class:`AttributeError`. Every key is
-        validated *before* any field is written, so a rejected call leaves the
-        model completely unmutated (no partial update, no stale caches).
+        unknown name are rejected with :class:`AttributeError`. Both the keys
+        and the values are validated *before* any field is written, so a
+        rejected call (unknown field or ill-typed value) leaves the model
+        completely unmutated (no partial update, no stale caches).
         """
-        for name in changes:
+        for name, value in changes.items():
             if name not in self._SETTABLE:
                 raise AttributeError(f"unknown or read-only scenario field: {name!r}")
+            _validate_settable(name, value)
         for name, value in changes.items():
             setattr(self, f"_{name}", value)
         self._resolve()
@@ -199,13 +245,15 @@ class Scenario:
         trigger the FR-15 "any scenario change resets the animation" teardown in
         the views -- editing the speed while a path is animating would stop it.
         This dedicated setter keeps the field encapsulated (no public attribute
-        write) while leaving a running animation untouched.
+        write) while leaving a running animation untouched. A non-finite or
+        negative speed is rejected with :class:`ValueError`.
         """
-        self._animation_speed = speed
+        self._animation_speed = _validate_animation_speed(speed)
 
     def _resolve(self) -> None:
         """Recompute cached ``solutions`` and the ``highlighted`` selection."""
         self._solutions = solve_all(self._start, self._goal, self._radius_policy.min_radius())
+        self._solutions_view = MappingProxyType(self._solutions)
         selected = self._selected_type
         if selected is not None and isinstance(self._solutions.get(selected), DubinsPath):
             self._highlighted = selected

@@ -42,6 +42,16 @@ def _feasible_path() -> DubinsPath:
     raise AssertionError("expected at least one feasible path for the test fixture")
 
 
+def _zero_length_path() -> DubinsPath:
+    """A degenerate zero-length path (start == goal) that samples to one row."""
+    config = Config(3.0, 4.0, 1.0)
+    solutions = solve_all(config, config, radius=2.0)
+    for sol in solutions.values():
+        if isinstance(sol, DubinsPath) and sol.length == 0.0:
+            return sol
+    raise AssertionError("expected a zero-length feasible path for the test fixture")
+
+
 # --- JSON round-trip --------------------------------------------------------
 
 
@@ -80,6 +90,31 @@ def test_saved_file_matches_ext4_schema(tmp_path: Path) -> None:
         "radius_policy": {"type": "fixed", "value": 2.0},
         "display": {"heading_convention": "azimuth", "angle_unit": "rad"},
     }
+
+
+def test_partial_write_failure_preserves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mid-write I/O failure must leave the prior good file intact, no .tmp behind."""
+    scenario = _make_scenario()
+    target = tmp_path / "scenario.json"
+
+    # Establish a known-good file that must survive a failed re-save.
+    good = '{"kept": true}\n'
+    target.write_text(good, encoding="utf-8")
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated disk full")
+
+    monkeypatch.setattr(json, "dump", boom)
+
+    with pytest.raises(ScenarioError):
+        save_scenario(scenario, target)
+
+    # Original content untouched (atomic replace never happened) ...
+    assert target.read_text(encoding="utf-8") == good
+    # ... and no stray temp file was left behind.
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_to_update_kwargs_matches_load(tmp_path: Path) -> None:
@@ -284,6 +319,23 @@ def test_csv_export_endpoints_match_samples(tmp_path: Path) -> None:
     last = [float(v) for v in rows[-1]]
     assert first == pytest.approx(list(samples[0]), abs=1e-9)
     assert last == pytest.approx(list(samples[-1]), abs=1e-9)
+
+
+def test_csv_export_zero_length_path_single_row(tmp_path: Path) -> None:
+    path = _zero_length_path()
+    samples = path.sample(0.05)
+    assert len(samples) == 1  # sanity: the fixture really samples to one row
+
+    target = tmp_path / "waypoints.csv"
+    export_waypoints_csv(target, path)
+
+    with target.open("r", encoding="utf-8", newline="") as fh:
+        rows = list(csv.reader(fh))
+
+    assert rows[0] == ["x", "y", "theta_rad"]
+    assert len(rows) == 2  # header + single data row
+    data = [float(v) for v in rows[1]]
+    assert data == pytest.approx(list(samples[0]), abs=1e-9)
 
 
 def test_csv_export_accepts_str_path(tmp_path: Path) -> None:

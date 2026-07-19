@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from dubins_demo.core.dubins import Config, DubinsPath, PathType, shortest
+from dubins_demo.core.dubins import Config, DubinsPath, PathType, shortest, solve_all
 from dubins_demo.core.model import (
     Convention,
     FixedRadius,
@@ -163,3 +163,58 @@ def test_display_prefs_do_not_affect_solutions() -> None:
     scenario.update(heading_convention=Convention.AZIMUTH, angle_unit=Unit.RAD)
     after = {pt: getattr(s, "length", None) for pt, s in scenario.solutions.items()}
     assert before == after
+
+
+def test_solutions_is_a_read_only_view() -> None:
+    scenario = _make_scenario()
+    solutions = scenario.solutions
+    # The cache cannot be mutated through the returned view.
+    with pytest.raises(TypeError):
+        solutions[PathType.LSL] = None  # type: ignore[index]
+    # And it reflects the current solve, updating on the next re-solve.
+    assert set(solutions) == set(PathType)
+    scenario.update(goal=Config(20.0, 0.0, 0.0))
+    assert set(scenario.solutions) == set(PathType)
+
+
+def test_animation_speed_rejects_negative_and_non_finite() -> None:
+    scenario = _make_scenario()
+    for bad in (-1.0, math.nan, math.inf):
+        with pytest.raises(ValueError, match="speed"):
+            scenario.set_animation_speed(bad)
+        with pytest.raises(ValueError, match="speed"):
+            _make_scenario(animation_speed=bad)
+
+
+def test_update_with_bad_value_leaves_model_unmutated() -> None:
+    scenario = _make_scenario()
+    original_goal = scenario.goal
+    solutions_before = scenario.solutions
+    calls = {"n": 0}
+    scenario.add_listener(lambda: calls.__setitem__("n", calls["n"] + 1))
+
+    # An ill-typed value is rejected before any field is written, even when a
+    # valid field is changed in the same call.
+    with pytest.raises(TypeError):
+        scenario.update(goal=Config(1.0, 1.0, 0.0), start="oops")
+    assert scenario.goal is original_goal  # valid field not applied either
+    assert scenario.solutions is solutions_before  # no re-solve
+    assert calls["n"] == 0  # no notification
+
+    with pytest.raises(TypeError):
+        scenario.update(radius_policy=None)
+    assert calls["n"] == 0
+
+
+def test_update_solves_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    scenario = _make_scenario()
+    count = {"n": 0}
+    real = solve_all
+
+    def counting_solve_all(*args: object, **kwargs: object) -> object:
+        count["n"] += 1
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("dubins_demo.core.model.solve_all", counting_solve_all)
+    scenario.update(goal=Config(8.0, -3.0, 0.0), show_circles=True)
+    assert count["n"] == 1  # one update -> exactly one solve_all, not one per field

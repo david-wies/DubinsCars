@@ -50,11 +50,24 @@ class PathType(Enum):
 
 @dataclass(frozen=True)
 class Config:
-    """An oriented planar configuration: position (m) and heading (rad)."""
+    """An oriented planar configuration: position (m) and heading (rad).
+
+    ``theta`` is intentionally *not* normalized to ``[0, 2*pi)``: ``_advance``
+    relies on continuous, unnormalized angle accumulation across arcs, and
+    ``sample`` normalizes headings only on output. A ``theta`` outside
+    ``[0, 2*pi)`` is therefore accepted as-is.
+    """
 
     x: float
     y: float
     theta: float
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.x) and math.isfinite(self.y) and math.isfinite(self.theta)):
+            raise ValueError(
+                f"config components must be finite, got "
+                f"x={self.x!r}, y={self.y!r}, theta={self.theta!r}"
+            )
 
 
 @dataclass(frozen=True)
@@ -65,7 +78,7 @@ class Segment:
     length: float
 
     def __post_init__(self) -> None:
-        if self.length < 0.0:
+        if not math.isfinite(self.length) or self.length < 0.0:
             raise ValueError(f"segment length must be >= 0, got {self.length!r}")
 
 
@@ -118,7 +131,7 @@ class DubinsPath:
     start: Config
 
     def __post_init__(self) -> None:
-        if self.radius <= 0.0:
+        if not math.isfinite(self.radius) or self.radius <= 0.0:
             raise ValueError(f"turn radius must be positive, got {self.radius!r}")
         kinds = tuple(seg.kind for seg in self.segments)
         if kinds != self.path_type.kinds:

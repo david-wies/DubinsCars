@@ -235,13 +235,25 @@ def test_shortest_none_when_all_infeasible() -> None:
 # --- turning_centers ---------------------------------------------------------
 
 
-def test_turning_centers_geometry() -> None:
+@pytest.mark.parametrize(
+    "theta,expected_left,expected_right",
+    [
+        # Heading East: left is North (+y), right is South (-y).
+        (0.0, (0.0, 1.0), (0.0, -1.0)),
+        # Heading North: left is West (-x), right is East (+x).
+        (math.pi / 2, (-1.0, 0.0), (1.0, 0.0)),
+    ],
+)
+def test_turning_centers_geometry(
+    theta: float,
+    expected_left: tuple[float, float],
+    expected_right: tuple[float, float],
+) -> None:
     radius = 2.0
-    cfg = Config(0.0, 0.0, 0.0)  # heading East
+    cfg = Config(0.0, 0.0, theta)
     left, right = turning_centers(cfg, radius)
-    # Left of East is North (+y), right is South (-y).
-    assert left == pytest.approx((0.0, radius))
-    assert right == pytest.approx((0.0, -radius))
+    assert left == pytest.approx((radius * expected_left[0], radius * expected_left[1]))
+    assert right == pytest.approx((radius * expected_right[0], radius * expected_right[1]))
     for center in (left, right):
         assert math.hypot(center[0] - cfg.x, center[1] - cfg.y) == pytest.approx(radius)
 
@@ -270,9 +282,40 @@ def test_segment_immutability() -> None:
 # --- Value-object validation -------------------------------------------------
 
 
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_config_rejects_non_finite_x(bad: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        Config(bad, 0.0, 0.0)
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_config_rejects_non_finite_y(bad: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        Config(0.0, bad, 0.0)
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_config_rejects_non_finite_theta(bad: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        Config(0.0, 0.0, bad)
+
+
+@pytest.mark.parametrize("theta", [7.0, -1.0, 10.0 * math.pi])
+def test_config_accepts_unnormalized_theta(theta: float) -> None:
+    # theta is intentionally not normalized to [0, 2*pi); values outside that
+    # range are stored unchanged (see Config docstring / _advance).
+    cfg = Config(1.0, 2.0, theta)
+    assert cfg.theta == theta
+
+
 def test_segment_rejects_negative_length() -> None:
     with pytest.raises(ValueError, match="length"):
         Segment(SegmentKind.S, -0.1)
+
+
+def test_segment_rejects_nan_length() -> None:
+    with pytest.raises(ValueError, match="length"):
+        Segment(SegmentKind.S, math.nan)
 
 
 def test_dubins_path_rejects_non_positive_radius() -> None:
@@ -280,6 +323,14 @@ def test_dubins_path_rejects_non_positive_radius() -> None:
     straight = Segment(SegmentKind.S, 1.0)
     with pytest.raises(ValueError, match="radius"):
         DubinsPath(PathType.LSL, (left, straight, left), 0.0, Config(0.0, 0.0, 0.0))
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf])
+def test_dubins_path_rejects_non_finite_radius(bad: float) -> None:
+    left = Segment(SegmentKind.L, 1.0)
+    straight = Segment(SegmentKind.S, 1.0)
+    with pytest.raises(ValueError, match="radius"):
+        DubinsPath(PathType.LSL, (left, straight, left), bad, Config(0.0, 0.0, 0.0))
 
 
 def test_dubins_path_rejects_segments_inconsistent_with_word() -> None:
