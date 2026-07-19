@@ -65,6 +65,20 @@ def test_non_positive_radius_all_infeasible() -> None:
         assert all(isinstance(s, Infeasible) for s in sols.values())
 
 
+@pytest.mark.parametrize("radius", [math.nan, math.inf])
+def test_non_finite_radius_is_clean_infeasible(radius: float) -> None:
+    # A NaN or inf turn radius must be trapped by the radius guard and reported
+    # as clean geometric/degenerate infeasibility for every word -- never as an
+    # "INTERNAL:" reason, which would signal a broken closed-form guard rather
+    # than a legitimately non-existent path. (NaN slips past a bare ``<= 0``
+    # test; +inf passes ``> 0`` and would otherwise raise downstream.)
+    sols = solve_all(Config(0, 0, 0), Config(3, 4, 1.0), radius)
+    assert set(sols) == set(PathType)
+    for s in sols.values():
+        assert isinstance(s, Infeasible)
+        assert not s.reason.startswith("INTERNAL")
+
+
 # --- Endpoint property: the correctness oracle ------------------------------
 
 
@@ -230,6 +244,21 @@ def test_shortest_returns_min_length_feasible(scenario: tuple[Config, Config, fl
 def test_shortest_none_when_all_infeasible() -> None:
     sols = solve_all(Config(0, 0, 0), Config(1, 1, 1), 0.0)
     assert shortest(sols) is None
+
+
+def test_shortest_tie_break_follows_declaration_order() -> None:
+    # Goal straight ahead: LSL and RSR both collapse to the same straight-line
+    # length (zero-length arcs), an exact numeric tie. ``shortest`` uses a
+    # strict ``<`` while iterating in PathType declaration order, so the tie
+    # must resolve to the first-declared word, LSL. This locks that documented
+    # iteration-order contract against accidental reordering or a ``<=`` slip.
+    sols = solve_all(Config(0.0, 0.0, 0.0), Config(10.0, 0.0, 0.0), 2.0)
+    lsl, rsr = sols[PathType.LSL], sols[PathType.RSR]
+    assert isinstance(lsl, DubinsPath)
+    assert isinstance(rsr, DubinsPath)
+    assert lsl.length == rsr.length  # exact tie, not merely approximate
+    assert list(PathType).index(PathType.LSL) < list(PathType).index(PathType.RSR)
+    assert shortest(sols) is PathType.LSL
 
 
 # --- turning_centers ---------------------------------------------------------

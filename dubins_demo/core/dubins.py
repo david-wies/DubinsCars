@@ -330,11 +330,15 @@ def solve_all(
     """Solve all six Dubins words for the given scenario.
 
     Every word is guarded so a degenerate scenario yields an
-    :class:`Infeasible` entry rather than raising (FR-8, FR-24). A non-positive
-    radius makes every word infeasible.
+    :class:`Infeasible` entry rather than raising (FR-8, FR-24). A radius that
+    is not a positive, finite number makes every word infeasible.
     """
-    if radius <= 0.0:
-        reason = "turn radius must be positive"
+    # ``not (radius > 0.0)`` traps zero, negatives, and NaN (all comparisons
+    # with NaN are False); the explicit ``isfinite`` check also traps +inf,
+    # which would otherwise pass the ``> 0`` test and later raise when a
+    # non-finite segment length is constructed (violating FR-8/FR-24).
+    if not (radius > 0.0) or not math.isfinite(radius):
+        reason = "turn radius must be a positive, finite number"
         return {pt: Infeasible(pt, reason) for pt in PathType}
     return {pt: _solve_one(pt, start, goal, radius) for pt in PathType}
 

@@ -214,6 +214,59 @@ def test_update_with_bad_value_leaves_model_unmutated() -> None:
     assert calls["n"] == 0
 
 
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("start", "oops"),
+        ("goal", "oops"),
+        ("radius_policy", None),
+        ("heading_convention", "angle"),  # the string, not the Convention enum
+        ("angle_unit", "deg"),  # the string, not the Unit enum
+        ("selected_type", "LSL"),  # not a PathType and not None
+        ("show_circles", "yes"),  # not a bool
+    ],
+)
+def test_constructor_rejects_ill_typed_field(field: str, bad_value: object) -> None:
+    # Each of the seven _validate_settable guards in __init__ must reject a
+    # single ill-typed field. Start from an all-valid kwargs baseline and
+    # corrupt exactly one field so the failure is unambiguous.
+    kwargs: dict[str, object] = {
+        "start": Config(0.0, 0.0, 0.0),
+        "goal": Config(10.0, 5.0, math.pi / 2),
+        "radius_policy": FixedRadius(2.0),
+        "heading_convention": Convention.ANGLE,
+        "angle_unit": Unit.DEG,
+        "selected_type": None,
+        "show_circles": False,
+    }
+    kwargs[field] = bad_value
+    with pytest.raises(TypeError, match=field):
+        Scenario(**kwargs)  # type: ignore[arg-type]
+
+
+def test_notify_isolates_failing_listener(capsys: pytest.CaptureFixture[str]) -> None:
+    # A listener that raises must not strand later listeners: _notify isolates
+    # each callback, so the second still fires and the model stays consistent.
+    scenario = _make_scenario()
+    fired = {"second": 0}
+
+    def boom() -> None:
+        raise RuntimeError("view blew up")
+
+    scenario.add_listener(boom)
+    scenario.add_listener(lambda: fired.__setitem__("second", fired["second"] + 1))
+
+    new_goal = Config(8.0, -3.0, 0.0)
+    # update() must not propagate the listener's exception.
+    scenario.update(goal=new_goal)
+
+    assert fired["second"] == 1  # later listener still ran
+    assert scenario.goal is new_goal  # model state applied and consistent
+    assert scenario.highlighted == shortest(scenario.solutions)
+    # The swallowed error leaves a stderr trace rather than vanishing silently.
+    assert "RuntimeError" in capsys.readouterr().err
+
+
 def test_update_solves_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
     scenario = _make_scenario()
     count = {"n": 0}

@@ -11,6 +11,7 @@ notification.
 from __future__ import annotations
 
 import math
+import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -111,19 +112,12 @@ class Scenario:
     backs.
     """
 
-    #: Fields that :meth:`update` may set. The derived caches (``solutions``,
-    #: ``highlighted``) are deliberately absent -- they are recomputed, never set.
-    _SETTABLE = frozenset(
-        {
-            "start",
-            "goal",
-            "radius_policy",
-            "heading_convention",
-            "angle_unit",
-            "selected_type",
-            "show_circles",
-        }
-    )
+    #: Fields that :meth:`update` may set, derived from :data:`_SETTABLE_TYPES`
+    #: so the two never drift (adding a field to the type map is enough). The
+    #: derived caches (``solutions``, ``highlighted``) are deliberately absent --
+    #: they are recomputed, never set. Membership only; iteration order is
+    #: irrelevant (``update`` iterates the caller's ``changes``, not this set).
+    _SETTABLE: frozenset[str] = frozenset(_SETTABLE_TYPES)
 
     def __init__(
         self,
@@ -271,5 +265,13 @@ class Scenario:
             self._highlighted = shortest(self._solutions)
 
     def _notify(self) -> None:
+        # Isolate listeners: one raising view must not strand the others
+        # half-refreshed, nor let its exception escape update() past the point
+        # where the model has already re-solved. There is no logging framework
+        # here and core/ must stay UI-free (no messagebox), so a best-effort
+        # stderr traceback is the trace we leave -- swallowed, never re-raised.
         for cb in self._listeners:
-            cb()
+            try:
+                cb()
+            except Exception:  # noqa: BLE001 - deliberate per-listener isolation
+                traceback.print_exc()

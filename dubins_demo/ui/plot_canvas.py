@@ -383,6 +383,11 @@ class PlotCanvas:
         name, mode = self._drag
         inv = self.ax.transData.inverted()
         data_x, data_y = inv.transform((event.x, event.y))
+        # A degenerate axes state can make the inverse transform yield nan/inf;
+        # Config would reject those, so ignore the gesture rather than let the
+        # ValueError escape this matplotlib callback (it would only hit stderr).
+        if not (math.isfinite(data_x) and math.isfinite(data_y)):
+            return
         cfg = getattr(self.model, name)
         if mode == "move":
             new_cfg = Config(data_x, data_y, cfg.theta)

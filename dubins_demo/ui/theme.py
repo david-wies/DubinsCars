@@ -4,8 +4,8 @@ This module is the single source of truth for the app's *look*. It holds the
 light-mode color palette, a spacing scale, and two runtime appliers:
 
 - :func:`apply_theme` — sets the ``sv_ttk`` light theme and layers a handful of
-  custom ``ttk`` styles on top (card frames, section headings, a flat status
-  bar, an accent primary button).
+  custom ``ttk`` styles on top (muted secondary labels, a flat status bar, and a
+  card labelframe title color).
 - :func:`style_axes` — restyles a matplotlib ``Figure``/``Axes`` pair to match
   the Tk surface (white canvas, hairline grid, no top/right spines, muted
   ticks) so the plot reads as part of the same modern, light interface.
@@ -48,7 +48,6 @@ SPINE = "#cfcfcf"
 PAD_S = 4
 PAD_M = 8
 PAD_L = 12
-PAD_XL = 16
 
 # -- typography --------------------------------------------------------------
 
@@ -58,9 +57,7 @@ PAD_XL = 16
 PLOT_FONT_STACK = ["Inter", "Segoe UI", "Helvetica Neue", "Arial", "DejaVu Sans"]
 
 # ttk style names layered on top of sv_ttk. Views reference these by name.
-CARD_FRAME = "Card.TLabelframe"
 CARD_LABEL = "Card.TLabelframe.Label"
-HEADING_LABEL = "Heading.TLabel"
 MUTED_LABEL = "Muted.TLabel"
 STATUS_LABEL = "Status.TLabel"
 PRIMARY_BUTTON = "Accent.TButton"  # provided by sv_ttk; named here for discoverability
@@ -79,8 +76,6 @@ def apply_theme(root: object) -> None:
 
     style = ttk.Style()
 
-    # Section headings inside panels: slightly larger, semibold, tight.
-    style.configure(HEADING_LABEL, foreground=TEXT)
     style.configure(MUTED_LABEL, foreground=MUTED)
 
     # Flat status bar: no sunken 3-D relief (a dated Motif cue); a thin top

@@ -195,6 +195,48 @@ def test_non_numeric_coordinate_raises() -> None:
     assert "start.x" in str(excinfo.value)
 
 
+def test_integer_json_coordinates_load_as_floats() -> None:
+    # JSON integers (no decimal point) are valid coordinates: ``_require_number``
+    # accepts int and coerces via ``float()``. ``scenario_to_dict`` only ever
+    # emits floats, so build the document by hand to exercise the int path.
+    document = scenario_to_dict(_make_scenario())
+    document["start"] = {"x": 0, "y": 0, "theta": 0}
+    document["goal"] = {"x": 10, "y": 5, "theta": 1}
+
+    loaded = dict_to_scenario(document)
+
+    assert isinstance(loaded.start.x, float)
+    assert loaded.start.x == 0.0
+    assert loaded.goal.x == 10.0
+    assert loaded.goal.theta == 1.0
+
+
+@pytest.mark.parametrize("section", ["start", "goal", "display", "radius_policy"])
+def test_scalar_where_mapping_required_raises(section: str) -> None:
+    # A scalar where a nested object is expected must surface as a ScenarioError
+    # naming the offending section, not a bare TypeError from ``_require_mapping``.
+    document = scenario_to_dict(_make_scenario())
+    document[section] = 5
+
+    with pytest.raises(ScenarioError) as excinfo:
+        dict_to_scenario(document)
+    assert section in str(excinfo.value)
+
+
+@pytest.mark.parametrize("dropped_key", ["type", "value"])
+def test_radius_policy_missing_key_raises(dropped_key: str) -> None:
+    # Distinct from a present-but-wrong ``type``: an absent ``type``/``value``
+    # must be reported by ``_require_key`` as a missing-key ScenarioError.
+    document = scenario_to_dict(_make_scenario())
+    del document["radius_policy"][dropped_key]
+
+    with pytest.raises(ScenarioError) as excinfo:
+        dict_to_scenario(document)
+    message = str(excinfo.value)
+    assert dropped_key in message
+    assert "radius_policy" in message
+
+
 def test_bool_coordinate_rejected() -> None:
     # bool is an int subclass; ``true``/``false`` must not pass as a coordinate.
     document = scenario_to_dict(_make_scenario())

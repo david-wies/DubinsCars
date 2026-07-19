@@ -62,7 +62,7 @@ pre-commit run --all-files  # run everything once, e.g. before pushing
 ```
 
 CI (`.github/workflows/ci.yml`) runs the exact same `pre-commit` hooks plus
-`pytest` on every push and pull request against `master`.
+`pytest` on every push and pull request against `main`.
 
 Install the dev extras (`pip install -e ".[dev]"`) to get `pytest`, `ruff`,
 and `pre-commit`.
