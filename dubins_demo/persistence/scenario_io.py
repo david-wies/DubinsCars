@@ -268,11 +268,26 @@ def export_waypoints_csv(
     ``path_obj.sample(step)`` (``theta`` in radians, math convention). The file
     is opened with ``newline=""`` -- the standard-library csv idiom that keeps
     Windows from inserting blank rows between records.
+
+    Sampling happens before any file is touched, so a :class:`ValueError` from
+    an invalid ``step`` surfaces without disturbing an existing file. The write
+    itself is atomic (mirroring :func:`save_scenario`): rows are written to a
+    sibling ``.tmp`` file and then :func:`os.replace`-d onto ``path`` (atomic on
+    POSIX and Windows), so a mid-write failure never truncates a previously-good
+    file and leaves no stray temp file behind. Unlike :func:`save_scenario`, an
+    I/O failure propagates as the raw :class:`OSError` -- the caller
+    (``ui/app.py``) already handles ``OSError`` directly.
     """
     samples = path_obj.sample(step)
     target = Path(path)
-    with target.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["x", "y", "theta_rad"])
-        for x, y, theta in samples:
-            writer.writerow([float(x), float(y), float(theta)])
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["x", "y", "theta_rad"])
+            for x, y, theta in samples:
+                writer.writerow([float(x), float(y), float(theta)])
+        os.replace(tmp, target)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise

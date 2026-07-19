@@ -8,15 +8,17 @@ Desktop app (Python + Tkinter + matplotlib + numpy) that computes and demonstrat
 
 ## Commands
 
+**Always use the project virtualenv at `.venv`.** Prefix every Python/tool command with `.venv/bin/` (e.g. `.venv/bin/python`, `.venv/bin/pytest`, `.venv/bin/pre-commit`) or activate it first (`source .venv/bin/activate`). The bare `python` may be absent and the system interpreter lacks the project's dependencies.
+
 ```bash
-pip install -e ".[dev]"       # dev setup: numpy, matplotlib, pytest, ruff, pyright, pre-commit
-python -m dubins_demo          # launch the app (needs Tkinter: apt install python3-tk on Debian/Ubuntu)
-pytest                         # math-core tests only (dubins_demo/tests)
-pytest dubins_demo/tests/test_dubins.py::test_name   # single test
-pre-commit run --all-files     # full lint/format/type gate (ruff + pyright + taplo + yamllint + markdownlint + stylelint + htmlhint)
+.venv/bin/pip install -e ".[dev]"     # dev setup: numpy, matplotlib, pytest, ruff, pyright, pre-commit
+.venv/bin/python -m dubins_demo        # launch the app (needs Tkinter: apt install python3-tk on Debian/Ubuntu)
+.venv/bin/pytest                       # math-core tests only (dubins_demo/tests)
+.venv/bin/pytest dubins_demo/tests/test_dubins.py::test_name   # single test
+.venv/bin/pre-commit run --all-files   # full lint/format/type gate (ruff + pyright + taplo + yamllint + markdownlint + stylelint + htmlhint)
 ```
 
-CI (`.github/workflows/ci.yml`) runs the **exact same** `pre-commit` hooks plus `pytest` (on py3.10/3.11/3.12). Local and CI never drift — change a hook once in `.pre-commit-config.yaml`. CI and the remote default branch are both `master` (a local-only `main` branch also exists).
+CI (`.github/workflows/ci.yml`) runs the **exact same** `pre-commit` hooks plus `pytest` (on py3.10/3.11/3.12). Local and CI never drift — change a hook once in `.pre-commit-config.yaml`. CI and the remote default branch are both `main` (`master` has been retired).
 
 ## Architecture
 

@@ -80,7 +80,6 @@ def apply_theme(root: object) -> None:
     style = ttk.Style()
 
     # Section headings inside panels: slightly larger, semibold, tight.
-    base = style.lookup("TLabel", "font") or "TkDefaultFont"
     style.configure(HEADING_LABEL, foreground=TEXT)
     style.configure(MUTED_LABEL, foreground=MUTED)
 
@@ -90,8 +89,6 @@ def apply_theme(root: object) -> None:
 
     # Card-like grouped frames with a readable, colored title.
     style.configure(CARD_LABEL, foreground=MUTED)
-
-    _ = base  # font stack is owned by sv_ttk; kept for potential heading sizing
 
 
 def _resolve_font_family() -> list[str]:

@@ -118,6 +118,10 @@ class PlotCanvas:
         self._anim: FuncAnimation | None = None
         self._anim_points = None
         self._playing = False
+        # Current marker frame; lives on the instance so it survives pause →
+        # resume. FuncAnimation just ticks; the position is read here, not from
+        # the ``frame`` it passes in. Reset to 0 only on a full stop.
+        self._frame = 0
 
         self._connect_events(canvas_widget)
         self.model.add_listener(self._on_model_changed)
@@ -442,6 +446,10 @@ class PlotCanvas:
         points = solution.sample(_ANIM_STEP)
         interval = max(10.0, (_ANIM_STEP / speed) * 1000.0)
         self._anim_points = points
+        # Resume from the paused frame; a genuine model change routes through
+        # _stop_animation, which has already reset _frame to 0. Guard the index
+        # in case the (re-sampled) path is shorter than the preserved frame.
+        self._frame %= len(points)
         self._anim = FuncAnimation(
             self.figure,
             self._animate,
@@ -468,16 +476,19 @@ class PlotCanvas:
             self._anim = None
         self._anim_points = None
         self._playing = False
+        self._frame = 0  # full reset (FR-15): next play starts from the beginning
         if self._marker is not None:
             self._marker.remove()
             self._marker = None
         self._play_button.configure(text="▶")
 
-    def _animate(self, frame: int) -> tuple[Line2D, ...]:
+    def _animate(self, _frame: int) -> tuple[Line2D, ...]:
+        # The frame index lives on the instance (see _frame) so it survives
+        # pause → resume; FuncAnimation's own counter is ignored deliberately.
         points = self._anim_points
         if points is None:
             return ()
-        x, y, theta = points[frame]
+        x, y, theta = points[self._frame]
         # A (3, 0, angle) marker is a triangle; angle 0 points up (+Y), so
         # subtract 90° to align the tip with the math-convention heading.
         marker = (3, 0, math.degrees(theta) - 90.0)
@@ -489,4 +500,5 @@ class PlotCanvas:
             self._marker.set_data([x], [y])
             # (numsides, style, angle) tuple is a valid marker but absent from MarkerType.
             self._marker.set_marker(marker)  # pyright: ignore[reportArgumentType]
+        self._frame = (self._frame + 1) % len(points)
         return (self._marker,)

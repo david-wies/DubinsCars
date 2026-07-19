@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -345,3 +346,36 @@ def test_csv_export_accepts_str_path(tmp_path: Path) -> None:
     export_waypoints_csv(str(target), path)
 
     assert target.exists()
+
+
+def test_csv_export_partial_write_failure_preserves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mid-write I/O failure must leave the prior good file intact, no .tmp behind."""
+    path = _feasible_path()
+    target = tmp_path / "waypoints.csv"
+
+    # Establish a known-good file that must survive a failed re-export.
+    good = "x,y,theta_rad\n0.0,0.0,0.0\n"
+    target.write_text(good, encoding="utf-8")
+
+    real_replace = os.replace
+
+    def boom(src: object, dst: object, *args: object, **kwargs: object) -> None:
+        raise OSError("simulated disk full")
+
+    monkeypatch.setattr(os, "replace", boom)
+
+    # The raw OSError propagates -- the caller (ui/app.py) handles OSError directly.
+    with pytest.raises(OSError):
+        export_waypoints_csv(target, path)
+
+    # Original content untouched (atomic replace never landed) ...
+    assert target.read_text(encoding="utf-8") == good
+    # ... and no stray temp file was left behind.
+    assert list(tmp_path.glob("*.tmp")) == []
+
+    # Sanity: with os.replace restored, the export succeeds and overwrites.
+    monkeypatch.setattr(os, "replace", real_replace)
+    export_waypoints_csv(target, path)
+    assert target.read_text(encoding="utf-8") != good

@@ -15,6 +15,7 @@ left (center 90 deg to the left of the heading, angular velocity positive); an
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
@@ -229,7 +230,7 @@ def _lsr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = math.atan2(-math.cos(alpha) - math.cos(beta), d + math.sin(alpha) + math.sin(beta))
     tmp -= math.atan2(-2.0, p)
     t = normalize(-alpha + tmp)
-    q = normalize(-normalize(beta) + tmp)
+    q = normalize(-beta + tmp)
     return t, p, q
 
 
@@ -269,7 +270,7 @@ def _lrl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
         + math.atan2(-math.cos(alpha) + math.cos(beta), d + math.sin(alpha) - math.sin(beta))
         + p / 2
     )
-    q = normalize(normalize(beta) - alpha - t + p)
+    q = normalize(beta - alpha - t + p)
     return t, p, q
 
 
@@ -338,7 +339,7 @@ def solve_all(
     return {pt: _solve_one(pt, start, goal, radius) for pt in PathType}
 
 
-def shortest(solutions: dict[PathType, DubinsPath | Infeasible]) -> PathType | None:
+def shortest(solutions: Mapping[PathType, DubinsPath | Infeasible]) -> PathType | None:
     """Return the shortest feasible path type, or ``None`` if none exist."""
     best: PathType | None = None
     best_len = math.inf
