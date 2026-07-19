@@ -18,8 +18,9 @@ source .venv/bin/activate
 # Windows (PowerShell):
 .venv\Scripts\Activate.ps1
 
-pip install -e .          # installs numpy + matplotlib
-python -m dubins_demo     # launches the desktop app
+pip install -e .          # installs numpy + matplotlib + sv-ttk
+dubins-demo               # launches the desktop app
+# equivalently: python -m dubins_demo
 ```
 
 In the app: type start/goal configurations or drag the arrows on the plot
