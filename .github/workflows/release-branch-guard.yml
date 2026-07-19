@@ -1,0 +1,27 @@
+name: Release branch guard
+
+# Enforces that the `release` branch only ever advances via a pull request
+# whose source branch is `main`. Branch protection makes PRs mandatory; this
+# required check makes `main` the only allowed source. Any PR into `release`
+# from another branch fails here and cannot be merged.
+on:
+  pull_request:
+    branches: [release]
+
+permissions:
+  contents: read
+
+jobs:
+  require-main:
+    name: require-main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure PR originates from main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "main" ]; then
+            echo "::error::PRs into 'release' must come from 'main' (got '$HEAD_REF')."
+            exit 1
+          fi
+          echo "OK: PR head branch is 'main'."
