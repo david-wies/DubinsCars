@@ -46,6 +46,7 @@ class App:
         self.root.minsize(920, 600)
 
         self._status_var = tk.StringVar(value="Ready.")
+        self._no_feasible_shown = False
 
         self._build_menu()
         self._build_layout()
@@ -151,6 +152,12 @@ class App:
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
         if not has_feasible:
             self._set_status("No feasible Dubins path for this scenario.")
+            self._no_feasible_shown = True
+        elif self._no_feasible_shown:
+            # Clear only the stale infeasibility notice; leave any other status
+            # (mouse coords, "Loaded…") untouched.
+            self._set_status("Ready.")
+            self._no_feasible_shown = False
 
     # -- file menu handlers --------------------------------------------------
 

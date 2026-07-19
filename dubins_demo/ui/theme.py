@@ -40,7 +40,7 @@ ACCENT = "#005fb8"
 BORDER = "#e2e2e2"
 #: Plot gridlines.
 GRID = "#ececec"
-#: Axis sp(left/bottom) color.
+#: Axis spine (left/bottom) color.
 SPINE = "#cfcfcf"
 
 # -- spacing scale (px) ------------------------------------------------------

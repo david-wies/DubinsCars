@@ -250,7 +250,7 @@ def _rlr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (math.sin(alpha) - math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))  # middle arc, >= pi
+    p = normalize(-math.acos(tmp))  # CCC middle arc angle in [0, 2*pi)
     t = normalize(
         alpha
         - math.atan2(math.cos(alpha) - math.cos(beta), d - math.sin(alpha) + math.sin(beta))
@@ -264,7 +264,7 @@ def _lrl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (-math.sin(alpha) + math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))  # middle arc, >= pi
+    p = normalize(-math.acos(tmp))  # CCC middle arc angle in [0, 2*pi)
     t = normalize(
         -alpha
         + math.atan2(-math.cos(alpha) + math.cos(beta), d + math.sin(alpha) - math.sin(beta))

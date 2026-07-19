@@ -68,9 +68,9 @@ class Unit(Enum):
 
 
 def _validate_animation_speed(value: float) -> float:
-    """Return *value* if it is a non-negative finite speed, else raise ValueError."""
-    if not math.isfinite(value) or value < 0:
-        raise ValueError(f"animation speed must be a non-negative finite value, got {value!r}")
+    """Return *value* if it is a positive finite speed, else raise ValueError."""
+    if not math.isfinite(value) or value <= 0.0:
+        raise ValueError(f"animation speed must be a positive finite value, got {value!r}")
     return value
 
 

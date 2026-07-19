@@ -31,7 +31,7 @@ Repository = "https://github.com/david-wies/DubinsCars"
 include = ["dubins_demo*"]
 
 [tool.setuptools.package-data]
-"dubins_demo.help" = ["*.html", "*.css"]
+"dubins_demo" = ["help/*.html", "help/*.css"]
 
 [tool.ruff]
 target-version = "py310"

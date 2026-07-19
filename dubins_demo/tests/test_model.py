@@ -186,6 +186,14 @@ def test_animation_speed_rejects_negative_and_non_finite() -> None:
             _make_scenario(animation_speed=bad)
 
 
+def test_animation_speed_rejects_zero() -> None:
+    scenario = _make_scenario()
+    with pytest.raises(ValueError, match="speed"):
+        scenario.set_animation_speed(0.0)
+    with pytest.raises(ValueError, match="speed"):
+        _make_scenario(animation_speed=0.0)
+
+
 def test_update_with_bad_value_leaves_model_unmutated() -> None:
     scenario = _make_scenario()
     original_goal = scenario.goal

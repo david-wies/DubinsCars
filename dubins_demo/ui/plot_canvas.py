@@ -372,6 +372,7 @@ class PlotCanvas:
         name, _mode = hit  # mode is resolved again on drag; only the name is needed here
         self._drag = hit
         self._selected = name
+        self._stop_animation()
         self._redraw()  # show the selection cue immediately
 
     def _on_motion(self, event: MouseEvent) -> None:
