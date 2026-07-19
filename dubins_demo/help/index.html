@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dubins Path Demonstrator — Help</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav id="sidebar" aria-label="Table of contents">
+  <div class="brand">
+    <span class="brand-mark">&#8734;</span>
+    <span class="brand-name">Dubins Path<br>Demonstrator</span>
+  </div>
+
+  <div class="search">
+    <label class="visually-hidden" for="search-box">Search the help page</label>
+    <input type="search" id="search-box" placeholder="Search this page&hellip;"
+           autocomplete="off" spellcheck="false">
+    <div class="search-controls">
+      <button type="button" id="search-prev" title="Previous match (Shift+Enter)">&#9650;</button>
+      <button type="button" id="search-next" title="Next match (Enter)">&#9660;</button>
+      <span id="search-count" aria-live="polite"></span>
+    </div>
+  </div>
+
+  <ol class="toc">
+    <li><a href="#using">1. Using the app</a>
+      <ol>
+        <li><a href="#using-inputs">Entering configurations</a></li>
+        <li><a href="#using-conventions">Heading convention &amp; units</a></li>
+        <li><a href="#using-drag">Dragging &amp; keyboard nudges</a></li>
+        <li><a href="#using-radius">Turn radius</a></li>
+        <li><a href="#using-table">Details table</a></li>
+        <li><a href="#using-overlay">Circles, animation</a></li>
+        <li><a href="#using-files">Save, load, export</a></li>
+      </ol>
+    </li>
+    <li><a href="#problem">2. The Dubins problem</a>
+      <ol>
+        <li><a href="#problem-statement">Problem statement</a></li>
+        <li><a href="#problem-assumptions">Assumptions</a></li>
+        <li><a href="#problem-theorem">Dubins' theorem</a></li>
+      </ol>
+    </li>
+    <li><a href="#words">3. The six words</a>
+      <ol>
+        <li><a href="#words-canonical">The canonical frame</a></li>
+        <li><a href="#words-csc">CSC: LSL, RSR, LSR, RSL</a></li>
+        <li><a href="#words-ccc">CCC: RLR, LRL</a></li>
+      </ol>
+    </li>
+    <li><a href="#example">4. Worked example</a></li>
+    <li><a href="#references">5. References</a></li>
+  </ol>
+</nav>
+
+<main id="content">
+
+  <header class="page-head">
+    <h1>Dubins Path Demonstrator — Help</h1>
+    <p class="lede">
+      This application finds the <strong>shortest curvature-constrained path</strong>
+      between two oriented positions in the plane — a start
+      <math><mrow><mo>(</mo><msub><mi>x</mi><mn>0</mn></msub><mo>,</mo><msub><mi>y</mi><mn>0</mn></msub><mo>,</mo><msub><mi>&#x3B8;</mi><mn>0</mn></msub><mo>)</mo></mrow></math>
+      and a goal
+      <math><mrow><mo>(</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><msub><mi>&#x3B8;</mi><mn>1</mn></msub><mo>)</mo></mrow></math>
+      — for a vehicle that always moves forward and cannot turn tighter than a fixed
+      minimum radius. It draws all six candidate path types, highlights the shortest,
+      and shows the geometry and the math behind them.
+    </p>
+  </header>
+
+  <!-- ================= SECTION 1 ================= -->
+  <section id="using">
+    <h2>1. Using the app</h2>
+
+    <h3 id="using-inputs">Entering configurations</h3>
+    <p>
+      The input panel has two groups, <strong>Start</strong> (drawn green) and
+      <strong>Goal</strong> (drawn red). Each group has three entry fields:
+    </p>
+    <ul>
+      <li><strong>X</strong> and <strong>Y</strong> — position in metres.</li>
+      <li><strong>Heading</strong> — the direction the vehicle points at that configuration.</li>
+    </ul>
+    <p>
+      Type a value and press <kbd>Enter</kbd> or click away (focus out) to commit it.
+      Non-numeric text turns the field red and posts a message in the status bar; the
+      stored configuration is left unchanged until you enter a valid number. Typed
+      input, dragging on the plot, and the radius spinbox are all bound to a single
+      model, so a change in one place is reflected everywhere.
+    </p>
+
+    <h3 id="using-conventions">Heading convention &amp; units</h3>
+    <p>
+      Two pairs of radio buttons control only how headings are <em>displayed and
+      parsed</em> — the stored value is always canonical (radians, math convention),
+      so toggling never drifts the underlying scenario.
+    </p>
+    <table class="ref-table">
+      <thead>
+        <tr><th>Toggle</th><th>Option</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td rowspan="2">Convention</td>
+          <td><strong>Angle</strong> (math)</td>
+          <td>0&deg; = East (+X axis), counter-clockwise positive.</td>
+        </tr>
+        <tr>
+          <td><strong>Azimuth</strong> (compass)</td>
+          <td>0&deg; = North (+Y axis), clockwise positive.</td>
+        </tr>
+        <tr>
+          <td rowspan="2">Unit</td>
+          <td><strong>Degrees</strong></td>
+          <td>Headings shown and typed in degrees.</td>
+        </tr>
+        <tr>
+          <td><strong>Radians</strong></td>
+          <td>Headings shown and typed in radians.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      The two conventions are related by
+      <math>
+        <mrow>
+          <mi>azimuth</mi><mo>=</mo>
+          <mrow><mo>(</mo><msup><mn>90</mn><mo>&#x2218;</mo></msup><mo>&#x2212;</mo><mi>angle</mi><mo>)</mo></mrow>
+          <mspace width="0.4em"/><mo>mod</mo><mspace width="0.3em"/><msup><mn>360</mn><mo>&#x2218;</mo></msup>
+        </mrow>
+      </math>,
+      and this relation is an involution, so switching back and forth is loss-free.
+    </p>
+
+    <h3 id="using-drag">Dragging &amp; keyboard nudges</h3>
+    <p>Each configuration is drawn as an arrow. On the plot you can:</p>
+    <ul>
+      <li><strong>Move</strong> — drag the <em>base</em> of the arrow (its tail) to
+        reposition the configuration. Grab zones are hit-tested in pixel space
+        (within 12&nbsp;px), so the feel stays constant at any zoom level.</li>
+      <li><strong>Rotate</strong> — drag the arrow <em>head</em>; the heading is set to
+        the angle from the base to the cursor.</li>
+    </ul>
+    <p>Clicking an arrow also makes it the keyboard-nudge target:</p>
+    <ul>
+      <li><kbd>&#8592;</kbd> <kbd>&#8593;</kbd> <kbd>&#8594;</kbd> <kbd>&#8595;</kbd>
+        &mdash; move the selected configuration by &plusmn;0.1&nbsp;m.</li>
+      <li><kbd>Shift</kbd> + arrow &mdash; rotate the heading by &plusmn;1&deg;.</li>
+    </ul>
+    <p>Every drag or nudge re-solves all six paths and redraws live.</p>
+
+    <h3 id="using-radius">Turn radius</h3>
+    <p>
+      The <strong>radius spinbox</strong> (starts at 2.0&nbsp;m; its minimum is
+      0.1&nbsp;m)
+      sets the minimum turn radius
+      <math><mi>r</mi></math>
+      shared by every arc. Values below the 0.1&nbsp;m minimum are clamped. A smaller radius makes
+      tight turns possible (paths get shorter and CCC types become feasible); a larger
+      radius forces wide sweeping arcs. The spinbox updates the
+      paths as you click or type.
+    </p>
+
+    <h3 id="using-table">Details table</h3>
+    <p>The details panel lists every path type:</p>
+    <ul>
+      <li><strong>Columns:</strong> path type, total length in metres, and the
+        per-segment breakdown, e.g. <code>L 2.31 &rarr; S 5.10 &rarr; L 0.87</code>.</li>
+      <li><strong>Sortable:</strong> click a column header to sort (default: length
+        ascending).</li>
+      <li><strong>Click to highlight:</strong> clicking a feasible row highlights that
+        path on the plot (bold, full opacity) and dims the others. The shortest
+        feasible path is highlighted by default; your choice is kept across re-solves
+        while it stays feasible, otherwise it falls back to the shortest.</li>
+      <li><strong>Infeasible rows</strong> are grayed out and sorted to the bottom, with
+        the reason shown in place of the segments (e.g. &ldquo;turning-circle centers
+        are more than 4r apart&rdquo;).</li>
+    </ul>
+
+    <h3 id="using-overlay">Turning circles &amp; animation</h3>
+    <ul>
+      <li><strong>Turning-circle overlay</strong> (toggle) draws the four circles of
+        radius <math><mi>r</mi></math> —
+        the left and right turning circles at the start and at the goal. These are the
+        circles every arc segment rides along, so the overlay makes the tangent
+        constructions in section&nbsp;3 visible.</li>
+      <li><strong>Animation</strong> — the play/pause button runs a marker along the
+        highlighted path at a speed you set in <strong>metres per second</strong>. It
+        stops and resets whenever the scenario changes.</li>
+    </ul>
+
+    <h3 id="using-files">Save, load &amp; export</h3>
+    <ul>
+      <li><strong>File &rarr; Save / Load</strong> stores the scenario (start, goal,
+        radius policy, and display preferences) as JSON. The heading is written
+        canonically in radians so a save/load round-trip restores the scenario exactly.</li>
+      <li><strong>File &rarr; Export CSV</strong> writes the highlighted path's sampled
+        waypoints as rows of <code>x,y,theta_rad</code> at a step you choose (default
+        0.05&nbsp;m). It is disabled when no path is feasible.</li>
+      <li><strong>Export PNG</strong> is available through the standard matplotlib
+        navigation toolbar (which also provides pan and zoom).</li>
+    </ul>
+  </section>
+
+  <!-- ================= SECTION 2 ================= -->
+  <section id="problem">
+    <h2>2. The Dubins problem</h2>
+
+    <h3 id="problem-statement">Problem statement</h3>
+    <p>
+      Given a start configuration
+      <math><mrow><mo>(</mo><msub><mi>x</mi><mn>0</mn></msub><mo>,</mo><msub><mi>y</mi><mn>0</mn></msub><mo>,</mo><msub><mi>&#x3B8;</mi><mn>0</mn></msub><mo>)</mo></mrow></math>
+      and a goal configuration
+      <math><mrow><mo>(</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><msub><mi>&#x3B8;</mi><mn>1</mn></msub><mo>)</mo></mrow></math>,
+      find the shortest smooth planar curve joining them whose curvature never exceeds
+      <math><mrow><mn>1</mn><mo>/</mo><mi>r</mi></mrow></math>,
+      where <math><mi>r</mi></math> is the
+      minimum turn radius. The curve must leave the start pointing along
+      <math><msub><mi>&#x3B8;</mi><mn>0</mn></msub></math>
+      and arrive at the goal pointing along
+      <math><msub><mi>&#x3B8;</mi><mn>1</mn></msub></math>.
+    </p>
+    <p>
+      Physically this models a vehicle — a car, an aircraft in level flight, a boat —
+      moving at constant speed with a bounded steering angle: the classic
+      &ldquo;forward-only unicycle&rdquo; or Dubins car.
+    </p>
+
+    <h3 id="problem-assumptions">Assumptions</h3>
+    <ul>
+      <li><strong>Constant speed.</strong> The vehicle moves forward at a fixed speed;
+        path <em>length</em> is therefore proportional to travel <em>time</em>.</li>
+      <li><strong>Bounded curvature.</strong> Steering is limited, so the tightest arc
+        the vehicle can trace has radius
+        <math><mi>r</mi></math>
+        (curvature
+        <math><mrow><mo>&#x2264;</mo><mn>1</mn><mo>/</mo><mi>r</mi></mrow></math>).
+        Optimal paths always turn at exactly this tightest radius or go straight.</li>
+      <li><strong>Forward only.</strong> No reversing. (Allowing reverse gives the
+        richer Reeds&ndash;Shepp family, which is out of scope here.)</li>
+    </ul>
+
+    <h3 id="problem-theorem">Dubins' theorem</h3>
+    <p>
+      In 1957 Lester Dubins proved that the shortest such path is always a concatenation
+      of at most three segments, each either a <strong>circular arc</strong> at the
+      minimum radius (turning <strong>L</strong>eft or <strong>R</strong>ight) or a
+      <strong>S</strong>traight line, and that only two families of three-letter
+      &ldquo;words&rdquo; can be optimal:
+    </p>
+    <ul>
+      <li><strong>CSC</strong> — an arc, then a straight tangent, then an arc:
+        <code>LSL</code>, <code>RSR</code>, <code>LSR</code>, <code>RSL</code>.</li>
+      <li><strong>CCC</strong> — three arcs, where the middle arc is longer than a
+        half-circle: <code>RLR</code>, <code>LRL</code>.</li>
+    </ul>
+    <p>
+      That is six candidate words in total. The optimal Dubins path is simply the
+      shortest feasible one among them — which is exactly what this app computes and
+      draws. A CCC word can only ever win when the start and goal are close together
+      relative to <math><mi>r</mi></math>;
+      when they are far apart the straight middle segment of a CSC word dominates.
+    </p>
+  </section>
+
+  <!-- ================= SECTION 3 ================= -->
+  <section id="words">
+    <h2>3. The six words</h2>
+
+    <h3 id="words-canonical">The canonical frame</h3>
+    <p>
+      All six solvers share one simplification. Translate the start to the origin,
+      rotate so the goal lies on the positive
+      <math><mi>x</mi></math>-axis, and scale
+      distances by
+      <math><mrow><mn>1</mn><mo>/</mo><mi>r</mi></mrow></math>
+      so the turn radius becomes 1. The problem reduces to
+      <math><mrow><mo>(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo>,</mo><mi>&#x3B1;</mi><mo>)</mo><mo>&#x2192;</mo><mo>(</mo><mi>d</mi><mo>,</mo><mn>0</mn><mo>,</mo><mi>&#x3B2;</mi><mo>)</mo></mrow></math>,
+      with three scalars. Writing
+      <math><mrow><msub><mi>&#x3B8;</mi><mn>0,1</mn></msub></mrow></math>
+      for the two headings and letting the vector from start to goal make angle
+      <math><mrow><msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>=</mo><mrow><mi>atan2</mi><mo>(</mo><msub><mi>y</mi><mn>1</mn></msub><mo>&#x2212;</mo><msub><mi>y</mi><mn>0</mn></msub><mo>,</mo><msub><mi>x</mi><mn>1</mn></msub><mo>&#x2212;</mo><msub><mi>x</mi><mn>0</mn></msub><mo>)</mo></mrow></mrow></math>:
+    </p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <mi>d</mi><mo>=</mo>
+              <mfrac>
+                <msqrt><mrow><msup><mrow><mo>(</mo><msub><mi>x</mi><mn>1</mn></msub><mo>&#x2212;</mo><msub><mi>x</mi><mn>0</mn></msub><mo>)</mo></mrow><mn>2</mn></msup><mo>+</mo><msup><mrow><mo>(</mo><msub><mi>y</mi><mn>1</mn></msub><mo>&#x2212;</mo><msub><mi>y</mi><mn>0</mn></msub><mo>)</mo></mrow><mn>2</mn></msup></mrow></msqrt>
+                <mi>r</mi>
+              </mfrac>
+              <mo>,</mo>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>&#x3B1;</mi><mo>=</mo><mrow><mo>(</mo><msub><mi>&#x3B8;</mi><mn>0</mn></msub><mo>&#x2212;</mo><msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>)</mo></mrow><mspace width="0.4em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi>
+              <mo>,</mo>
+              <mspace width="1.2em"/>
+              <mi>&#x3B2;</mi><mo>=</mo><mrow><mo>(</mo><msub><mi>&#x3B8;</mi><mn>1</mn></msub><mo>&#x2212;</mo><msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>)</mo></mrow><mspace width="0.4em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi><mo>.</mo>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+    <p>
+      Each solver returns three normalized segment parameters
+      <math><mrow><mo>(</mo><mi>t</mi><mo>,</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>)</mo></mrow></math>
+      in canonical units: for an arc it is the swept angle, for a straight segment it is
+      the length. Scaling back by
+      <math><mi>r</mi></math> gives the real
+      lengths, and the total path length is
+      <math><mrow><mi>L</mi><mo>=</mo><mi>r</mi><mo>(</mo><mi>t</mi><mo>+</mo><mi>p</mi><mo>+</mo><mi>q</mi><mo>)</mo></mrow></math>.
+      The formulas below follow Shkel &amp; Lumelsky (2001) and match the code in
+      <code>dubins_demo/core/dubins.py</code>.
+    </p>
+
+    <h3 id="words-csc">CSC words: outer and inner tangents</h3>
+    <p>
+      A CSC path leaves the start on a turning circle, runs straight along a
+      <em>common tangent</em> to a turning circle at the goal, then arcs onto the goal
+      heading. Which tangent is used distinguishes the four words:
+    </p>
+    <ul>
+      <li><strong>LSL</strong> and <strong>RSR</strong> use an <strong>outer (external)
+        tangent</strong> — both arcs turn the same way, so the two circles sit on the
+        same side of the straight run. An outer tangent always exists, so LSL and RSR
+        are feasible for every scenario (though not always shortest).</li>
+      <li><strong>LSR</strong> and <strong>RSL</strong> use an <strong>inner (internal,
+        crossing) tangent</strong> — the arcs turn opposite ways and the straight run
+        crosses between the circles. An inner tangent exists only when the two
+        opposite-turning circles do not overlap — that is, when their centres are at
+        least <math><mrow><mn>2</mn><mi>r</mi></mrow></math> apart. Those centres depend
+        on the headings, not on the start-to-goal distance alone, so the exact test is
+        simply the sign of the radicand
+        <math><msup><mi>p</mi><mn>2</mn></msup></math> in the formula below: when it is
+        negative the square root is imaginary and the word is reported infeasible.</li>
+    </ul>
+
+    <p class="formula-caption"><strong>LSL</strong> (both arcs left, outer tangent):</p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <mi>p</mi><mo>=</mo>
+              <msqrt>
+                <mrow>
+                  <mn>2</mn><mo>+</mo><msup><mi>d</mi><mn>2</mn></msup>
+                  <mo>&#x2212;</mo><mn>2</mn><mi>cos</mi><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>)</mo>
+                  <mo>+</mo><mn>2</mn><mi>d</mi><mo>(</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo>
+                </mrow>
+              </msqrt>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>&#x3C6;</mi><mo>=</mo>
+              <mi>atan2</mi><mo>(</mo><mi>cos</mi><mi>&#x3B2;</mi><mo>&#x2212;</mo><mi>cos</mi><mi>&#x3B1;</mi><mo>,</mo><mspace width="0.3em"/><mi>d</mi><mo>+</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>t</mi><mo>=</mo><mo>(</mo><mo>&#x2212;</mo><mi>&#x3B1;</mi><mo>+</mo><mi>&#x3C6;</mi><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi>
+              <mo>,</mo><mspace width="1.2em"/>
+              <mi>q</mi><mo>=</mo><mo>(</mo><mi>&#x3B2;</mi><mo>&#x2212;</mo><mi>&#x3C6;</mi><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+    <p>
+      <strong>RSR</strong> is the mirror image: swap the roles of
+      <math><mi>&#x3B1;</mi></math> and
+      <math><mi>&#x3B2;</mi></math> inside the
+      sine terms and flip the arc signs. For the inner-tangent words
+      <strong>LSR</strong> and <strong>RSL</strong> the straight length becomes
+      <math><mrow><mi>p</mi><mo>=</mo><msqrt><mrow><mo>&#x2212;</mo><mn>2</mn><mo>+</mo><msup><mi>d</mi><mn>2</mn></msup><mo>+</mo><mn>2</mn><mi>cos</mi><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>)</mo><mo>&#xB1;</mo><mn>2</mn><mi>d</mi><mo>(</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>+</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo></mrow></msqrt></mrow></math>,
+      whose radicand going negative is exactly the &ldquo;circles overlap&rdquo;
+      infeasibility.
+    </p>
+
+    <h3 id="words-ccc">CCC words: the third-circle construction</h3>
+    <p>
+      A CCC path replaces the straight segment with a third arc. The outer two turning
+      circles (at the start and goal) are bridged by a <em>third</em> circle of the same
+      radius that is tangent to both; the vehicle rides its far side, which is why the
+      middle arc is always greater than
+      <math><mi>&#x3C0;</mi></math> (a reflex
+      turn). Because the bridging circle must touch both outer circles, the two
+      same-side turning-circle centres can be at most four radii apart. Those centres
+      depend on the headings, not on the start-to-goal distance alone, so the existence
+      condition is the requirement that the cosine argument below lies in
+      <math><mrow><mo>[</mo><mo>&#x2212;</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>]</mo></mrow></math>:
+    </p>
+    <div class="formula-block">
+      <math display="block">
+        <mrow>
+          <mo>&#x2212;</mo><mn>1</mn><mo>&#x2264;</mo>
+          <mfrac>
+            <mrow><mn>6</mn><mo>&#x2212;</mo><msup><mi>d</mi><mn>2</mn></msup><mo>+</mo><mn>2</mn><mi>cos</mi><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>)</mo><mo>+</mo><mn>2</mn><mi>d</mi><mo>(</mo><mo>&#xB1;</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>&#x2213;</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo></mrow>
+            <mrow><mn>8</mn></mrow>
+          </mfrac>
+          <mo>&#x2264;</mo><mn>1</mn>
+        </mrow>
+      </math>
+    </div>
+    <p>
+      When this argument falls outside
+      <math><mrow><mo>[</mo><mo>&#x2212;</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>]</mo></mrow></math>
+      — equivalently, when the same-side centres are farther than
+      <math><mrow><mn>4</mn><mi>r</mi></mrow></math> apart — the app reports RLR and LRL
+      as infeasible.
+    </p>
+
+    <p class="formula-caption"><strong>RLR</strong> (right, left, right):</p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <mi>p</mi><mo>=</mo><mi>arccos</mi><mo>&#x2061;</mo>
+              <mrow>
+                <mo>(</mo>
+                <mfrac>
+                  <mrow><mn>6</mn><mo>&#x2212;</mo><msup><mi>d</mi><mn>2</mn></msup><mo>+</mo><mn>2</mn><mi>cos</mi><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>)</mo><mo>+</mo><mn>2</mn><mi>d</mi><mo>(</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo></mrow>
+                  <mn>8</mn>
+                </mfrac>
+                <mo>)</mo>
+              </mrow>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>t</mi><mo>=</mo>
+              <mrow>
+                <mo>(</mo>
+                <mi>&#x3B1;</mi>
+                <mo>&#x2212;</mo>
+                <mi>atan2</mi><mo>(</mo><mi>cos</mi><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>cos</mi><mi>&#x3B2;</mi><mo>,</mo><mspace width="0.3em"/><mi>d</mi><mo>&#x2212;</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>+</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo>
+                <mo>+</mo>
+                <mfrac><mi>p</mi><mn>2</mn></mfrac>
+                <mo>)</mo>
+              </mrow>
+              <mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>q</mi><mo>=</mo><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>&#x2212;</mo><mi>t</mi><mo>+</mo><mi>p</mi><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+    <p>
+      <strong>LRL</strong> mirrors this, negating the
+      <math><mi>&#x3B1;</mi></math>-terms and
+      swapping the sign of the
+      <math><mrow><mn>2</mn><mi>d</mi><mo>(</mo><mi>sin</mi><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>sin</mi><mi>&#x3B2;</mi><mo>)</mo></mrow></math>
+      contribution. The middle parameter
+      <math><mi>p</mi></math> is taken as the
+      reflex value (the code uses the negative branch of
+      <math><mrow><mi>arccos</mi></mrow></math>
+      then normalizes into
+      <math><mrow><mo>[</mo><mn>0</mn><mo>,</mo><mn>2</mn><mi>&#x3C0;</mi><mo>)</mo></mrow></math>),
+      capturing the &ldquo;middle arc &gt;
+      <math><mi>&#x3C0;</mi></math>&rdquo;
+      requirement of Dubins' theorem.
+    </p>
+  </section>
+
+  <!-- ================= SECTION 4 ================= -->
+  <section id="example">
+    <h2>4. Worked example</h2>
+    <p>Take a concrete scenario:</p>
+    <div class="formula-block">
+      <math display="block">
+        <mrow>
+          <mtext>start</mtext><mo>=</mo><mo>(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo>,</mo><msup><mn>0</mn><mo>&#x2218;</mo></msup><mo>)</mo>
+          <mo>,</mo><mspace width="1.2em"/>
+          <mtext>goal</mtext><mo>=</mo><mo>(</mo><mn>10</mn><mo>,</mo><mn>5</mn><mo>,</mo><msup><mn>90</mn><mo>&#x2218;</mo></msup><mo>)</mo>
+          <mo>,</mo><mspace width="1.2em"/>
+          <mi>r</mi><mo>=</mo><mn>2</mn><mtext> m.</mtext>
+        </mrow>
+      </math>
+    </div>
+
+    <p><strong>Step 1 — canonical transform.</strong> The vector from start to goal is
+      <math><mrow><mo>(</mo><mn>10</mn><mo>,</mo><mn>5</mn><mo>)</mo></mrow></math>, so</p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>=</mo><mi>atan2</mi><mo>(</mo><mn>5</mn><mo>,</mo><mn>10</mn><mo>)</mo><mo>=</mo><mn>0.4636</mn><mspace width="0.3em"/><mtext>rad</mtext>
+              <mspace width="1.2em"/>
+              <mo>(</mo><mi>sin</mi><msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>=</mo><mn>1</mn><mo>/</mo><msqrt><mn>5</mn></msqrt><mo>,</mo><mspace width="0.3em"/><mi>cos</mi><msub><mi>&#x3B8;</mi><mtext>v</mtext></msub><mo>=</mo><mn>2</mn><mo>/</mo><msqrt><mn>5</mn></msqrt><mo>)</mo>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>d</mi><mo>=</mo><mfrac><msqrt><mrow><msup><mn>10</mn><mn>2</mn></msup><mo>+</mo><msup><mn>5</mn><mn>2</mn></msup></mrow></msqrt><mn>2</mn></mfrac><mo>=</mo><mfrac><msqrt><mn>125</mn></msqrt><mn>2</mn></mfrac><mo>=</mo><mn>5.5902</mn>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>&#x3B1;</mi><mo>=</mo><mo>(</mo><mn>0</mn><mo>&#x2212;</mo><mn>0.4636</mn><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi><mo>=</mo><mn>5.8195</mn>
+              <mspace width="1.2em"/>
+              <mi>&#x3B2;</mi><mo>=</mo><mfrac><mi>&#x3C0;</mi><mn>2</mn></mfrac><mo>&#x2212;</mo><mn>0.4636</mn><mo>=</mo><mn>1.1071</mn>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+    <p>
+      Note that
+      <math><mrow><mi>sin</mi><mi>&#x3B1;</mi><mo>=</mo><mo>&#x2212;</mo><mn>1</mn><mo>/</mo><msqrt><mn>5</mn></msqrt></mrow></math>,
+      <math><mrow><mi>cos</mi><mi>&#x3B1;</mi><mo>=</mo><mn>2</mn><mo>/</mo><msqrt><mn>5</mn></msqrt></mrow></math>,
+      <math><mrow><mi>sin</mi><mi>&#x3B2;</mi><mo>=</mo><mn>2</mn><mo>/</mo><msqrt><mn>5</mn></msqrt></mrow></math>,
+      <math><mrow><mi>cos</mi><mi>&#x3B2;</mi><mo>=</mo><mn>1</mn><mo>/</mo><msqrt><mn>5</mn></msqrt></mrow></math>,
+      and
+      <math><mrow><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>=</mo><mo>&#x2212;</mo><mi>&#x3C0;</mi><mo>/</mo><mn>2</mn></mrow></math>,
+      so <math><mrow><mi>cos</mi><mo>(</mo><mi>&#x3B1;</mi><mo>&#x2212;</mo><mi>&#x3B2;</mi><mo>)</mo><mo>=</mo><mn>0</mn></mrow></math>.
+    </p>
+
+    <p><strong>Step 2 — solve one word (LSL).</strong> Feeding this
+      <math><mrow><mo>(</mo><mi>&#x3B1;</mi><mo>,</mo><mi>&#x3B2;</mi><mo>,</mo><mi>d</mi><mo>)</mo></mrow></math>
+      into the RLR and LRL cosine arguments above gives values below
+      <math><mrow><mo>&#x2212;</mo><mn>1</mn></mrow></math> (the same-side turning
+      circles are more than <math><mrow><mn>4</mn><mi>r</mi></mrow></math> apart), so both
+      CCC words are infeasible and the shortest path is a CSC word.
+      Plugging into the LSL formulas:</p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <msup><mi>p</mi><mn>2</mn></msup><mo>=</mo><mn>2</mn><mo>+</mo><mn>31.25</mn><mo>&#x2212;</mo><mn>0</mn><mo>+</mo><mn>2</mn><mo>(</mo><mn>5.5902</mn><mo>)</mo><mo>(</mo><mo>&#x2212;</mo><mn>3</mn><mo>/</mo><msqrt><mn>5</mn></msqrt><mo>)</mo><mo>=</mo><mn>18.25</mn>
+              <mspace width="1em"/><mo>&#x21D2;</mo><mspace width="0.5em"/>
+              <mi>p</mi><mo>=</mo><mn>4.2720</mn>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>&#x3C6;</mi><mo>=</mo><mi>atan2</mi><mo>(</mo><mo>&#x2212;</mo><mn>1</mn><mo>/</mo><msqrt><mn>5</mn></msqrt><mo>,</mo><mspace width="0.3em"/><mn>5.5902</mn><mo>&#x2212;</mo><mn>3</mn><mo>/</mo><msqrt><mn>5</mn></msqrt><mo>)</mo><mo>=</mo><mi>atan2</mi><mo>(</mo><mo>&#x2212;</mo><mn>0.4472</mn><mo>,</mo><mn>4.2486</mn><mo>)</mo><mo>=</mo><mo>&#x2212;</mo><mn>0.1049</mn>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>t</mi><mo>=</mo><mo>(</mo><mo>&#x2212;</mo><mn>5.8195</mn><mo>+</mo><mo>(</mo><mo>&#x2212;</mo><mn>0.1049</mn><mo>)</mo><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi><mo>=</mo><mn>0.3588</mn>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>q</mi><mo>=</mo><mo>(</mo><mn>1.1071</mn><mo>&#x2212;</mo><mo>(</mo><mo>&#x2212;</mo><mn>0.1049</mn><mo>)</mo><mo>)</mo><mspace width="0.3em"/><mo>mod</mo><mspace width="0.3em"/><mn>2</mn><mi>&#x3C0;</mi><mo>=</mo><mn>1.2120</mn>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+
+    <p><strong>Step 3 — scale back by
+      <math><mrow><mi>r</mi><mo>=</mo><mn>2</mn></mrow></math>.</strong>
+      The canonical parameters
+      <math><mrow><mo>(</mo><mi>t</mi><mo>,</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>)</mo><mo>=</mo><mo>(</mo><mn>0.3588</mn><mo>,</mo><mn>4.2720</mn><mo>,</mo><mn>1.2120</mn><mo>)</mo></mrow></math>
+      become real lengths:</p>
+    <div class="formula-block">
+      <math display="block">
+        <mtable columnalign="left">
+          <mtr>
+            <mtd>
+              <mtext>L arc: </mtext><mn>2</mn><mo>&#xD7;</mo><mn>0.3588</mn><mo>=</mo><mn>0.7175</mn><mtext> m</mtext>
+              <mo>,</mo><mspace width="1em"/>
+              <mtext>S: </mtext><mn>2</mn><mo>&#xD7;</mo><mn>4.2720</mn><mo>=</mo><mn>8.5440</mn><mtext> m</mtext>
+              <mo>,</mo><mspace width="1em"/>
+              <mtext>L arc: </mtext><mn>2</mn><mo>&#xD7;</mo><mn>1.2120</mn><mo>=</mo><mn>2.4241</mn><mtext> m</mtext>
+            </mtd>
+          </mtr>
+          <mtr>
+            <mtd>
+              <mi>L</mi><mo>=</mo><mn>0.7175</mn><mo>+</mo><mn>8.5440</mn><mo>+</mo><mn>2.4241</mn><mo>=</mo><mn>11.686</mn><mtext> m.</mtext>
+            </mtd>
+          </mtr>
+        </mtable>
+      </math>
+    </div>
+    <p>
+      The remaining CSC words come out longer (RSR &#8776; 35.88&nbsp;m, LSR &#8776;
+      23.43&nbsp;m, RSL &#8776; 24.22&nbsp;m), so <strong>LSL at 11.686&nbsp;m is the
+      Dubins path</strong> for this scenario — which is exactly the row the app
+      highlights. Enter these numbers in the app to see them reproduced in the details
+      table.
+    </p>
+  </section>
+
+  <!-- ================= SECTION 5 ================= -->
+  <section id="references">
+    <h2>5. References</h2>
+    <ol class="references">
+      <li>
+        L.&nbsp;E. Dubins (1957). <em>On curves of minimal length with a constraint on
+        average curvature, and with prescribed initial and terminal positions and
+        tangents.</em> American Journal of Mathematics <strong>79</strong>(3),
+        497&ndash;516.
+        DOI: <a href="https://doi.org/10.2307/2372560">10.2307/2372560</a>.
+        <span class="note">The original existence-and-classification theorem.</span>
+      </li>
+      <li>
+        A.&nbsp;M. Shkel and V. Lumelsky (2001). <em>Classification of the Dubins
+        set.</em> Robotics and Autonomous Systems <strong>34</strong>(2&ndash;3),
+        179&ndash;202.
+        DOI: <a href="https://doi.org/10.1016/S0921-8890(00)00127-5">10.1016/S0921-8890(00)00127-5</a>.
+        <span class="note">Source of the closed-form
+        <math><mrow><mo>(</mo><mi>t</mi><mo>,</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>)</mo></mrow></math>
+        formulas used by this app.</span>
+      </li>
+    </ol>
+    <p class="offline-note">
+      These two DOI links are the only external references on this page. The page is
+      otherwise fully self-contained and works offline; the links simply will not
+      resolve without a network connection.
+    </p>
+  </section>
+
+  <footer class="page-foot">
+    <p>Dubins Path Demonstrator — offline help. Render requires a browser with native
+       MathML (Chrome&nbsp;109+, Firefox, Safari).</p>
+  </footer>
+
+</main>
+
+<script>
+/* Dependency-free in-page search: walks text nodes of #content, wraps matches in
+   <mark>, counts them, and jumps between them. Idempotent — strips prior marks
+   before each search; never touches <script>, <style>, or <math> subtrees. */
+(function () {
+  "use strict";
+  var content   = document.getElementById("content");
+  var box       = document.getElementById("search-box");
+  var countEl   = document.getElementById("search-count");
+  var prevBtn   = document.getElementById("search-prev");
+  var nextBtn   = document.getElementById("search-next");
+
+  var marks = [];
+  var current = -1;
+  var debounce = null;
+
+  function clearMarks() {
+    var existing = content.querySelectorAll("mark.search-hit");
+    for (var i = 0; i < existing.length; i++) {
+      var m = existing[i];
+      var parent = m.parentNode;
+      parent.replaceChild(document.createTextNode(m.textContent), m);
+      parent.normalize();
+    }
+    marks = [];
+    current = -1;
+  }
+
+  function skippable(node) {
+    var el = node.parentNode;
+    while (el && el !== content) {
+      var tag = el.nodeName;
+      if (tag === "SCRIPT" || tag === "STYLE" || tag === "MATH") return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
+
+  function updateCount() {
+    if (!box.value) { countEl.textContent = ""; return; }
+    if (marks.length === 0) { countEl.textContent = "No matches"; return; }
+    countEl.textContent = (current + 1) + " / " + marks.length;
+  }
+
+  function setCurrent(i) {
+    if (marks.length === 0) { updateCount(); return; }
+    if (current >= 0 && marks[current]) marks[current].classList.remove("current");
+    current = ((i % marks.length) + marks.length) % marks.length;
+    marks[current].classList.add("current");
+    marks[current].scrollIntoView({ block: "center", behavior: "smooth" });
+    updateCount();
+  }
+
+  function highlight(query) {
+    clearMarks();
+    if (!query) { updateCount(); return; }
+    var q = query.toLowerCase();
+
+    var walker = document.createTreeWalker(
+      content, NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function (node) {
+          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          if (skippable(node)) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    var nodes = [];
+    var n;
+    while ((n = walker.nextNode())) nodes.push(n);
+
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var text = node.nodeValue;
+      var lower = text.toLowerCase();
+      var idx = lower.indexOf(q);
+      if (idx === -1) continue;
+
+      var frag = document.createDocumentFragment();
+      var last = 0;
+      while (idx !== -1) {
+        if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+        var mark = document.createElement("mark");
+        mark.className = "search-hit";
+        mark.textContent = text.slice(idx, idx + q.length);
+        frag.appendChild(mark);
+        last = idx + q.length;
+        idx = lower.indexOf(q, last);
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    }
+
+    marks = Array.prototype.slice.call(content.querySelectorAll("mark.search-hit"));
+    if (marks.length) setCurrent(0); else updateCount();
+  }
+
+  box.addEventListener("input", function () {
+    clearTimeout(debounce);
+    debounce = setTimeout(function () { highlight(box.value.trim()); }, 120);
+  });
+
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (marks.length === 0) highlight(box.value.trim());
+      else setCurrent(current + (e.shiftKey ? -1 : 1));
+    } else if (e.key === "Escape") {
+      box.value = "";
+      highlight("");
+    }
+  });
+
+  nextBtn.addEventListener("click", function () { setCurrent(current + 1); });
+  prevBtn.addEventListener("click", function () { setCurrent(current - 1); });
+})();
+</script>
+
+</body>
+</html>

@@ -48,6 +48,8 @@ dmypy.json
 *.swp
 *.swo
 *~
+.zed/
+AGENTS.md
 
 # --- OS ---
 .DS_Store
@@ -57,3 +59,4 @@ desktop.ini
 # --- Project-specific runtime output (scenario files/exports are user data, not source) ---
 *.dubins.json
 /exports/
+.serena/

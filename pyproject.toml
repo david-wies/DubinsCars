@@ -10,28 +10,21 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "David Wies" }]
-keywords = ["dubins-path", "robotics", "path-planning", "tkinter", "matplotlib"]
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Operating System :: OS Independent",
-  "Topic :: Scientific/Engineering",
-]
-dependencies = ["numpy", "matplotlib"]
+dependencies = ["numpy", "matplotlib", "sv-ttk"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.15", "pre-commit>=4"]
+dev = ["pytest>=8", "ruff>=0.15", "pre-commit>=4", "pyright>=1.1.411"]
 
-[project.urls]
-Repository = "https://github.com/david-wies/DubinsCars"
+# This is a desktop application, not a library. The launcher below is the
+# intended entry point; ``python -m dubins_demo`` remains equivalent.
+[project.gui-scripts]
+dubins-demo = "dubins_demo.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["dubins_demo*"]
 
 [tool.setuptools.package-data]
-"dubins_demo.help" = ["*.html", "*.css"]
+"dubins_demo" = ["help/*.html", "help/*.css"]
 
 [tool.ruff]
 target-version = "py310"
@@ -58,6 +51,11 @@ known-first-party = ["dubins_demo"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pyright]
+include = ["dubins_demo"]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 testpaths = ["dubins_demo/tests"]

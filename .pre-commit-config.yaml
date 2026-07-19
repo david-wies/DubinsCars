@@ -33,7 +33,17 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  # --- TOML: pyproject.toml syntax + formatting ---
+  # --- Python: static type checking (pyright, standard mode; see [tool.pyright]) ---
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: 392b6ba8e54be6d603e02e9f8d601d27b7a48d12 # v1.1.411
+    hooks:
+      - id: pyright
+        # Runtime deps must be importable for pyright to resolve their inline
+        # types (our annotations depend on numpy/matplotlib; the test suite on
+        # pytest, whose `skip()` NoReturn drives type narrowing). sv_ttk ships
+        # no stubs — its import is suppressed in theme.py — but is listed so the
+        # hook env matches the real one.
+        additional_dependencies: [numpy, matplotlib, sv-ttk, pytest]
   - repo: https://github.com/ComPWA/taplo-pre-commit
     rev: 23eab0f0eedcbedebff420f5fdfb284744adc7b3 # v0.9.3
     hooks:

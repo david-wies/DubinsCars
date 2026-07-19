@@ -33,13 +33,13 @@ them.
 - **FR-2** User can toggle heading convention (angle/azimuth) and units (deg/rad);
   toggling converts the displayed field values in place without changing the
   underlying configuration.
-- **FR-3** User can set the turn radius via a slider (range 0.1–50 m) with a linked
-  entry field for exact values. Values outside the range are clamped.
+- **FR-3** User can set the turn radius via a spinbox (starts at 2.0 m; minimum 0.1 m).
+  Values below the 0.1 m minimum are clamped.
 - **FR-4** User can drag the start/goal arrow **base** on the plot to move the
   configuration, and drag the arrow **head** to rotate its heading.
 - **FR-5** Keyboard nudging: arrow keys move the selected configuration by ±0.1 m;
   Shift+arrows rotate the heading by ±1°.
-- **FR-6** Typed input, dragging, and the slider all stay in sync (two-way binding
+- **FR-6** Typed input, dragging, and the spinbox all stay in sync (two-way binding
   through a single model).
 
 ### 3.2 Computation
@@ -112,7 +112,7 @@ them.
 
 - **EXT-1** Minimum turn radius derived from speed: the model obtains the radius
   through a `RadiusPolicy` interface (`min_radius() -> float`). The initial
-  implementation is `FixedRadius(value)` driven by the slider. A future
+  implementation is `FixedRadius(value)` driven by the spinbox. A future
   `SpeedBasedRadius` can implement e.g. car `r = v²/(μg)`, aircraft
   `r = v²/(g·tan φ_bank)`, or rate-limited `r = v/ω_max` — without touching the
   solvers or views.
