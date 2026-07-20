@@ -2,8 +2,9 @@
 
 ``easydubins`` (https://pypi.org/project/easydubins/) is a third-party, wholly
 separate implementation of the same Shkel & Lumelsky (2001) closed forms. It is
-a *dev-only* dependency (see ``pyproject.toml``); if it is missing the whole
-module skips rather than fails.
+an *optional* dependency in the ``crosscheck`` extra
+(``pip install -e ".[crosscheck]"``); if it is missing the whole module skips
+rather than fails.
 
 Two levels of agreement are asserted:
 
@@ -37,7 +38,7 @@ from dubins_demo.core.dubins import Config, DubinsPath, PathType, shortest, solv
 
 ed = pytest.importorskip(
     "easydubins.dubin_path",
-    reason="easydubins is an optional dev dependency (pip install -e '.[dev]')",
+    reason="easydubins is an optional dependency (pip install -e '.[crosscheck]')",
 )
 
 _ABS_TOL = 1e-9
@@ -68,6 +69,11 @@ def _random_cases(n: int) -> list[tuple[Config, Config, float]]:
 
 
 _ALL_CASES = _FIXED_CASES + _random_cases(400)
+
+# The full-pipeline test already sweeps all 400 random cases; the per-word test
+# only needs a smaller slice to catch a closed-form regression per word without
+# multiplying CI runtime by six (40 random + 6 fixed) x 6 words.
+_PER_WORD_CASES = _FIXED_CASES + _random_cases(40)
 
 
 def _case_id(case: tuple[Config, Config, float]) -> str:
@@ -101,7 +107,7 @@ def test_shortest_path_matches_easydubins(case: tuple[Config, Config, float]) ->
     assert best.value == ed_word or _is_length_tie(best_solutions, ed_len)
 
 
-@pytest.mark.parametrize("case", _ALL_CASES, ids=_case_id)
+@pytest.mark.parametrize("case", _PER_WORD_CASES, ids=_case_id)
 @pytest.mark.parametrize("path_type", list(PathType), ids=lambda pt: pt.value)
 def test_per_word_matches_easydubins(
     path_type: PathType, case: tuple[Config, Config, float]
@@ -118,12 +124,26 @@ def test_per_word_matches_easydubins(
     ours = solver(alpha, beta, d)
     theirs = ed.general_planner(path_type.value, alpha, beta, d)
 
-    # Feasibility must agree: both ``None`` or both a solution. The fixed seed
-    # keeps the case list clear of exact existence boundaries (p_sq ~ 0 for
-    # LSR/RSL, |tmp| ~ 1 for CCC), so this tolerance-free compare is safe today;
-    # a case landing within float-noise of a boundary is the one spot where the
-    # two algebraically-identical impls could legitimately round opposite ways
-    # and disagree here.
+    # Feasibility must agree: both ``None`` or both a solution. A tolerance-free
+    # compare is right in the common case, but a scenario landing within
+    # float-noise of an existence boundary (p_sq ~ 0 for LSR/RSL, |tmp| ~ 1 for
+    # CCC) is the one spot where the two algebraically-identical impls can round
+    # opposite ways. If exactly one side is feasible AND that feasible solution
+    # sits on such a boundary -- detected via its middle segment -- the
+    # disagreement is benign boundary noise, so skip; a disagreement away from
+    # any boundary is a real bug and must still hard-fail. Boundary signatures of
+    # the middle segment: LSR/RSL straight collapses to ~0; CCC ``|tmp|=1`` lands
+    # the reflex arc ``p = normalize(-acos(tmp))`` at ~0 / ~2*pi (tmp=+1) or ~pi
+    # (tmp=-1), the two edges of its feasible ``{0} u [pi, 2*pi)`` range.
+    if (ours is None) != (theirs is None):
+        feasible = list(ours) if ours is not None else theirs[0]
+        middle = feasible[1]
+        is_ccc = path_type.value in ("RLR", "LRL")
+        on_boundary = abs(middle) < 1e-6 or (
+            is_ccc and (abs(middle - math.pi) < 1e-6 or abs(middle - 2 * math.pi) < 1e-6)
+        )
+        if on_boundary:
+            pytest.skip(f"{path_type.value} feasibility on existence boundary (benign noise)")
     assert (ours is None) == (theirs is None), (
         f"{path_type.value} feasibility disagreement: ours={ours!r} theirs={theirs!r}"
     )

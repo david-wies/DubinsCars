@@ -12,6 +12,7 @@ Desktop app (Python + Tkinter + matplotlib + numpy) that computes and demonstrat
 
 ```bash
 .venv/bin/pip install -e ".[dev]"     # dev setup: numpy, matplotlib, pytest, ruff, pyright, pre-commit
+.venv/bin/pip install -e ".[crosscheck]"  # optional: easydubins oracle for cross-check tests (skipped if absent)
 .venv/bin/python -m dubins_demo        # launch the app (needs Tkinter: apt install python3-tk on Debian/Ubuntu)
 .venv/bin/pytest                       # math-core tests only (dubins_demo/tests)
 .venv/bin/pytest dubins_demo/tests/test_dubins.py::test_name   # single test

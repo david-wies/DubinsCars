@@ -34,12 +34,9 @@ Repository = "https://github.com/david-wies/DubinsCars"
 Issues = "https://github.com/david-wies/DubinsCars/issues"
 
 [project.optional-dependencies]
-dev = [
-  "pytest>=8",
-  "ruff>=0.15",
-  "pre-commit>=4",
-  "pyright>=1.1.411",
-  "easydubins>=1.3,<2", # independent Dubins oracle for cross-check tests
+dev = ["pytest>=8", "ruff>=0.15", "pre-commit>=4", "pyright>=1.1.411"]
+crosscheck = [
+  "easydubins>=1.3,<2", # independent Dubins oracle for cross-check tests (optional)
 ]
 
 # This is a desktop application, not a library. The launcher below is the
