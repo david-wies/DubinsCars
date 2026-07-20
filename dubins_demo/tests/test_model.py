@@ -214,18 +214,22 @@ def test_update_with_bad_value_leaves_model_unmutated() -> None:
     assert calls["n"] == 0
 
 
-@pytest.mark.parametrize(
-    ("field", "bad_value"),
-    [
-        ("start", "oops"),
-        ("goal", "oops"),
-        ("radius_policy", None),
-        ("heading_convention", "angle"),  # the string, not the Convention enum
-        ("angle_unit", "deg"),  # the string, not the Unit enum
-        ("selected_type", "LSL"),  # not a PathType and not None
-        ("show_circles", "yes"),  # not a bool
-    ],
-)
+#: One ill-typed value per settable field, exercising every predicate in
+#: ``model._SETTABLE_TYPES``. Shared by the constructor and ``update`` rejection
+#: tests so the two never drift and neither duplicates the table (pylint
+#: ``duplicate-code``).
+_ILL_TYPED_SETTABLE: list[tuple[str, object]] = [
+    ("start", "oops"),
+    ("goal", "oops"),
+    ("radius_policy", None),
+    ("heading_convention", "angle"),  # the string, not the Convention enum
+    ("angle_unit", "deg"),  # the string, not the Unit enum
+    ("selected_type", "LSL"),  # not a PathType and not None
+    ("show_circles", "yes"),  # not a bool
+]
+
+
+@pytest.mark.parametrize(("field", "bad_value"), _ILL_TYPED_SETTABLE)
 def test_constructor_rejects_ill_typed_field(field: str, bad_value: object) -> None:
     # Each of the seven _validate_settable guards in __init__ must reject a
     # single ill-typed field. Start from an all-valid kwargs baseline and
@@ -242,6 +246,19 @@ def test_constructor_rejects_ill_typed_field(field: str, bad_value: object) -> N
     kwargs[field] = bad_value
     with pytest.raises(TypeError, match=field):
         Scenario(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(("field", "bad_value"), _ILL_TYPED_SETTABLE)
+def test_update_rejects_ill_typed_field(field: str, bad_value: object) -> None:
+    # Companion to test_constructor_rejects_ill_typed_field: update() guards the
+    # same _SETTABLE_TYPES predicates, so every field must reject its ill-typed
+    # value with a TypeError naming the field. test_update_with_bad_value_leaves_
+    # model_unmutated already proves the atomic no-partial-mutation contract via
+    # ``start``/``radius_policy``; this pins that each individual field predicate
+    # -- including the bool, enum, and PathType|None cases -- actually fires.
+    scenario = _make_scenario()
+    with pytest.raises(TypeError, match=field):
+        scenario.update(**{field: bad_value})
 
 
 def test_notify_isolates_failing_listener(capsys: pytest.CaptureFixture[str]) -> None:

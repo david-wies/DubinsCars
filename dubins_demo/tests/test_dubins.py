@@ -105,6 +105,58 @@ def test_solver_returning_bad_segment_is_clean_internal_infeasible(
     assert lsl.reason.startswith("INTERNAL")
 
 
+def test_solver_raising_value_error_is_clean_internal_infeasible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Companion to test_solver_returning_bad_segment_is_clean_internal_infeasible:
+    # there the ValueError is raised by the Segment/DubinsPath guards *after* the
+    # solver returns; here the solver itself raises inside the ``result =
+    # solver(...)`` call. Both must be trapped by the same INTERNAL net so no
+    # exception escapes _solve_one/solve_all into a Tk callback (FR-8/FR-24).
+    def _raising_solver(alpha: float, beta: float, d: float) -> tuple[float, float, float]:
+        raise ValueError("boom from inside the solver")
+
+    monkeypatch.setitem(dubins._SOLVERS, PathType.RSR, (_raising_solver, "unused"))
+
+    result = dubins._solve_one(PathType.RSR, Config(0, 0, 0), Config(3, 4, 1.0), 1.0)
+    assert isinstance(result, Infeasible)
+    assert result.reason.startswith("INTERNAL: unexpected ValueError")
+    assert "boom from inside the solver" in result.reason
+
+    # solve_all must not raise either, and only the patched word is INTERNAL.
+    rsr = solve_all(Config(0, 0, 0), Config(3, 4, 1.0), 1.0)[PathType.RSR]
+    assert isinstance(rsr, Infeasible)
+    assert rsr.reason.startswith("INTERNAL")
+
+
+def test_infeasible_reason_is_the_solver_default_for_geometric_infeasibility() -> None:
+    # A genuinely infeasible word (the closed-form solver returns ``None``) must
+    # carry the solver's default reason verbatim: non-empty, user-facing, and
+    # never prefixed "INTERNAL:" (which would signal a broken guard rather than
+    # legitimate geometric non-existence). Overlapping opposite-sense circles
+    # kill LSR/RSL; a far-apart goal (> 4r) kills the CCC words; a zero radius
+    # kills every word via the radius guard. Pin all three reason strings.
+    overlap = solve_all(Config(0.0, 0.0, 0.0), Config(0.5, 0.0, math.pi), 1.0)
+    for word in (PathType.LSR, PathType.RSL):
+        sol = overlap[word]
+        assert isinstance(sol, Infeasible)
+        assert sol.reason == dubins._SOLVERS[word][1]
+        assert sol.reason
+        assert not sol.reason.startswith("INTERNAL")
+
+    far = solve_all(Config(0.0, 0.0, 0.0), Config(50.0, 0.0, 0.0), 1.0)
+    for word in (PathType.RLR, PathType.LRL):
+        sol = far[word]
+        assert isinstance(sol, Infeasible)
+        assert sol.reason == dubins._SOLVERS[word][1]
+        assert sol.reason
+
+    for sol in solve_all(Config(0.0, 0.0, 0.0), Config(3.0, 4.0, 1.0), 0.0).values():
+        assert isinstance(sol, Infeasible)
+        assert "radius" in sol.reason
+        assert not sol.reason.startswith("INTERNAL")
+
+
 # --- Endpoint property: the correctness oracle ------------------------------
 
 
@@ -438,6 +490,21 @@ def test_lsl_rsr_always_feasible(scenario: tuple[Config, Config, float]) -> None
     assert isinstance(sols[PathType.RSR], DubinsPath)
 
 
+def test_lsr_rsl_infeasible_when_opposite_circles_overlap() -> None:
+    # Overlapping opposite-sense turning circles: the inner tangent that LSR and
+    # RSL rely on does not exist, so both words are genuinely infeasible. This is
+    # the critical asymmetry with LSL/RSR: their p_sq is a sum of squares (only
+    # ever a tiny rounding-negative, safely clamped to 0), but the LSR/RSL p_sq
+    # can be *truly* negative and must NOT be clamped -- a naive ``max(0.0,
+    # p_sq)`` in _lsr/_rsl would fabricate a bogus path here and slip past every
+    # other test. LSL/RSR must still be feasible for the same scenario.
+    sols = solve_all(Config(0.0, 0.0, 0.0), Config(0.5, 0.0, math.pi), 1.0)
+    assert isinstance(sols[PathType.LSR], Infeasible)
+    assert isinstance(sols[PathType.RSL], Infeasible)
+    assert isinstance(sols[PathType.LSL], DubinsPath)
+    assert isinstance(sols[PathType.RSR], DubinsPath)
+
+
 def test_lsl_feasible_when_left_circles_coincide() -> None:
     # Goal reachable from the start by a pure left arc: the two left turning
     # circles coincide, so the LSL straight run collapses to ~0 and p_sq sits on
@@ -592,9 +659,11 @@ def test_shortest_matches_min_csc_for_far_goals(start: Config, goal: Config, rad
 # The CSC oracle above cannot cover RLR/LRL: those words never contain a
 # straight, and their intricate middle arc (an ``acos`` half-angle) is exactly
 # the segment an endpoint-only test can miss -- a middle arc off by a full turn
-# (2*pi*r) lands on the same point. This oracle rebuilds the three mutually
-# tangent turning circles from scratch and derives each arc length by plain
-# angle differencing, wholly independent of the closed-form solver.
+# (2*pi*r) would land on the same point. The solver's ``normalize`` makes that
+# impossible today, so this oracle stands as a regression guard against a future
+# edit that drops a ``normalize``. It rebuilds the three mutually tangent turning
+# circles from scratch and derives each arc length by plain angle differencing,
+# wholly independent of the closed-form solver.
 
 
 def _ccc_arc(
@@ -609,7 +678,9 @@ def _ccc_arc(
     ``kind`` is ``"L"`` (counter-clockwise) or ``"R"`` (clockwise). The swept
     angle is the minimal non-negative rotation in ``[0, 2*pi)`` carrying
     ``p_from`` to ``p_to`` in that sense, so a solver arc inflated by a whole
-    turn does not collapse onto the same value.
+    turn does not collapse onto the same value -- ``normalize`` rules that out in
+    the current solver, but this keeps the cross-check honest against a future
+    edit that drops it.
     """
     fa = math.atan2(p_from[1] - center[1], p_from[0] - center[0])
     ta = math.atan2(p_to[1] - center[1], p_to[0] - center[0])
@@ -626,8 +697,10 @@ def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[t
     center -- an intersection of two radius-``2*r`` circles, feasible when the
     outer centers are at most ``4*r`` apart. The two intersections give two
     candidate maneuvers; Dubins selects the reflex branch (middle arc in
-    ``[pi, 2*pi)``, from ``p = normalize(-acos(...))`` in the canonical solver),
-    which is always the candidate with the *larger* middle arc. Choosing by that
+    ``[pi, 2*pi)`` for every non-degenerate path, from ``p = normalize(-acos(...))``
+    in the canonical solver -- ``p`` collapses to 0 only at a degenerate
+    ``start == goal``, so the range is really ``{0} u [pi, 2*pi)``), which is
+    always the candidate with the *larger* middle arc. Choosing by that
     geometric rule -- never by comparing against the solver's lengths -- keeps
     the cross-check honest.
     """
@@ -649,6 +722,8 @@ def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[t
     best: list[tuple[str, float]] | None = None
     best_mid = -math.inf
     for c2 in ((mx + half * ux, my + half * uy), (mx - half * ux, my - half * uy)):
+        # Midpoint = tangent point only because both circles have radius r
+        # (equal-radius tangency touches exactly halfway between the centers).
         t1 = ((c1[0] + c2[0]) / 2.0, (c1[1] + c2[1]) / 2.0)  # start<->mid tangent point
         t2 = ((c2[0] + c3[0]) / 2.0, (c2[1] + c3[1]) / 2.0)  # mid<->goal tangent point
         mid = _ccc_arc(c2, t1, t2, k_mid, r)
@@ -667,6 +742,12 @@ _CCC_FIXED = [
     (Config(0.0, 0.0, 0.5), Config(1.5, 0.8, 2.3), 1.4),
     (Config(-1.0, 2.0, 1.0), Config(1.0, 1.5, -0.5), 1.6),
     (Config(2.0, 2.0, 0.0), Config(2.0, 2.0, math.pi), 1.5),  # in-place U-turn
+    # Near-boundary case (LRL): outer centers ~3.71r apart (vs the 4r existence
+    # limit), pushing the reflex middle arc down toward pi -- ~3.907 rad, still
+    # clearly above pi and cleanly discriminable at abs=1e-9. The other fixtures
+    # sit at sep/r <= 2.57 with fat middle arcs, so branch selection is easy
+    # there; this one exercises the reflex-vs-inner choice near the hard end.
+    (Config(0.0, 0.0, 0.5), Config(5.0, 2.0, 3.0), 1.5),
 ]
 
 
@@ -678,7 +759,13 @@ def test_ccc_segment_lengths_match_tangent_oracle(
     sol = solve_all(start, goal, radius)[word]
     if not isinstance(sol, DubinsPath):
         pytest.skip(f"{word.value} infeasible for this fixture")
-    segs = _ccc_oracle(word, start, goal, radius)
+    try:
+        segs = _ccc_oracle(word, start, goal, radius)
+    except ValueError:
+        # Coincident outer centers (sep ~ 0) leave the oracle undefined -- skip
+        # just as the random test does, so a near-boundary fixture that happens
+        # to degenerate for one word does not spuriously fail.
+        pytest.skip(f"{word.value} oracle undefined (coincident outer centers)")
     # Self-validate the oracle: its own segments must reconstruct the goal.
     ex, ey, eth = _fwd(start, segs, radius)
     assert ex == pytest.approx(goal.x, abs=1e-9)
@@ -692,10 +779,11 @@ def test_ccc_segment_lengths_match_tangent_oracle(
 
 
 def test_ccc_segment_lengths_match_tangent_oracle_random() -> None:
-    # A plain [-10, 10] sweep is useless for CCC: the outer circles are almost
-    # always more than 4*r apart, so every word is infeasible and skips. Place
-    # the goal within ~4*r of the start so RLR/LRL are feasible often enough to
-    # exercise the reflex middle arc across many geometries.
+    # A plain [-10, 10] sweep is a poor fit for CCC: the outer circles are
+    # usually more than 4*r apart, so RLR/LRL are feasible too rarely to reliably
+    # exercise the reflex arc. Place the goal within ~4*r of the start so RLR/LRL
+    # are feasible often enough to exercise the reflex middle arc across many
+    # geometries.
     rng = random.Random(20260720)
     checked = 0
     for _ in range(200):
@@ -725,3 +813,27 @@ def test_ccc_segment_lengths_match_tangent_oracle_random() -> None:
                 assert seg.length == pytest.approx(length, abs=1e-9)
             checked += 1
     assert checked > 20  # coverage guard: must not silently skip everything
+
+
+def test_ccc_oracle_rejects_coincident_outer_centers_while_solver_loops() -> None:
+    # start == goal with an identical heading: the outer turning circles of an
+    # RLR/LRL maneuver coincide (sep == 0), leaving the perpendicular direction
+    # ill-conditioned, so the tangent-circle oracle raises. The random CCC test
+    # only ever *skips* this branch (``except ValueError: continue``); pin it
+    # deterministically here. The real closed-form solver, by contrast, must stay
+    # robust on the same degenerate geometry: it returns a feasible full-loop
+    # CCC path (length 2*pi*r) that comes back to the start pose -- never a raise.
+    start = Config(1.0, 1.0, 0.5)
+    goal = Config(1.0, 1.0, 0.5)
+    radius = 1.5
+    sols = solve_all(start, goal, radius)
+    for word in (PathType.RLR, PathType.LRL):
+        with pytest.raises(ValueError, match="near-coincident"):
+            _ccc_oracle(word, start, goal, radius)
+        sol = sols[word]
+        assert isinstance(sol, DubinsPath)
+        assert sol.length == pytest.approx(2.0 * math.pi * radius)
+        end = sol.sample(0.01)[-1]
+        assert end[0] == pytest.approx(start.x, abs=1e-6)
+        assert end[1] == pytest.approx(start.y, abs=1e-6)
+        assert _angle_diff(end[2], normalize(start.theta)) < 1e-6
