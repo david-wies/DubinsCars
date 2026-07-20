@@ -57,8 +57,43 @@ _FIXED_CASES: list[tuple[Config, Config, float]] = [
 ]
 
 
-def _random_cases(n: int) -> list[tuple[Config, Config, float]]:
-    rng = random.Random(20260720)
+def test_easydubins_general_planner_convention_is_stable() -> None:
+    """Pin easydubins's ``general_planner`` calling convention (guards issue #3).
+
+    The per-word cross-check feeds our canonical ``(alpha, beta, d)`` straight
+    into ``general_planner``, so it silently depends on easydubins sharing that
+    exact convention. The ``easydubins>=1.3,<2`` pin allows in-range minors that
+    could in principle re-interpret the arguments (arg order, degrees vs radians,
+    a sign flip). These golden values -- read from the pinned version and
+    independent of our own solver -- freeze that convention, so any such drift
+    fails loudly here instead of silently corrupting the per-word comparison.
+
+    * A symmetric straight anchor ``(0, 0, d) -> (0, d, 0)`` pins the ``d``
+      argument position and confirms lengths are unit-radius radians, not degrees.
+    * An asymmetric anchor additionally pins the ``alpha`` vs ``beta`` order: an
+      arg transpose changes ``LSL`` and ``RSR`` here (the symmetric anchor alone
+      would not catch it).
+    """
+    for word in ("LSL", "RSR"):
+        straight = ed.general_planner(word, 0.0, 0.0, 2.0)
+        assert straight is not None
+        assert straight[0] == pytest.approx([0.0, 2.0, 0.0], abs=_ABS_TOL)
+
+    golden = {
+        "LSL": [5.640035023465776, 1.491253824037104, 1.4431502837138102],
+        "RSR": [0.10905718280959825, 2.6437350841009115, 5.374128124369988],
+        "LSR": [6.178286521505711, 2.853125248843, 5.378286521505711],
+    }
+    for word, expected in golden.items():
+        result = ed.general_planner(word, 0.3, 1.1, 2.0)
+        assert result is not None, f"{word} unexpectedly infeasible for the convention anchor"
+        assert result[0] == pytest.approx(expected, abs=_ABS_TOL), (
+            f"{word} convention drift: easydubins changed its canonical frame or arg order"
+        )
+
+
+def _random_cases(n: int, seed: int) -> list[tuple[Config, Config, float]]:
+    rng = random.Random(seed)
     cases: list[tuple[Config, Config, float]] = []
     for _ in range(n):
         start = Config(rng.uniform(-5, 5), rng.uniform(-5, 5), rng.uniform(0, 2 * math.pi))
@@ -68,12 +103,14 @@ def _random_cases(n: int) -> list[tuple[Config, Config, float]]:
     return cases
 
 
-_ALL_CASES = _FIXED_CASES + _random_cases(400)
+_ALL_CASES = _FIXED_CASES + _random_cases(400, seed=20260720)
 
 # The full-pipeline test already sweeps all 400 random cases; the per-word test
 # only needs a smaller slice to catch a closed-form regression per word without
-# multiplying CI runtime by six (40 random + 6 fixed) x 6 words.
-_PER_WORD_CASES = _FIXED_CASES + _random_cases(40)
+# multiplying CI runtime by six (40 random + 6 fixed) x 6 words. A *distinct*
+# seed (not a prefix of the 400) gives the per-word level its own geometries
+# rather than re-checking the first 40 full-pipeline cases.
+_PER_WORD_CASES = _FIXED_CASES + _random_cases(40, seed=20260721)
 
 
 def _case_id(case: tuple[Config, Config, float]) -> str:
