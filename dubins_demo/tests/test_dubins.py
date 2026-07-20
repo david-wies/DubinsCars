@@ -637,8 +637,10 @@ def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[t
         c1, c3, k_out, k_mid = _left_center(start, r), _left_center(goal, r), "L", "R"
     dx, dy = c3[0] - c1[0], c3[1] - c1[1]
     sep = math.hypot(dx, dy)
-    if sep == 0.0:
-        raise ValueError("coincident outer turning circles (sep == 0): CCC oracle undefined")
+    # Near-coincident outer centers leave the perpendicular direction (dx/sep,
+    # dy/sep) ill-conditioned, so reject on a small threshold, not just exact 0.
+    if sep < 1e-9:
+        raise ValueError(f"near-coincident outer turning circles (sep={sep}): CCC oracle undefined")
     mx, my = (c1[0] + c3[0]) / 2.0, (c1[1] + c3[1]) / 2.0
     half = math.sqrt(max(0.0, (2.0 * r) ** 2 - (sep / 2.0) ** 2))  # perpendicular offset
     ux, uy = -dy / sep, dx / sep  # unit perpendicular to the c1->c3 line
