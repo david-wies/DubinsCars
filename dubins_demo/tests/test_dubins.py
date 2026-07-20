@@ -586,3 +586,142 @@ def test_shortest_matches_min_csc_for_far_goals(start: Config, goal: Config, rad
     best_sol = sols[best]
     assert isinstance(best_sol, DubinsPath)
     assert best_sol.length == pytest.approx(oracle_min, abs=1e-9)
+
+
+# --- Independent geometric length oracle for the CCC words -------------------
+# The CSC oracle above cannot cover RLR/LRL: those words never contain a
+# straight, and their intricate middle arc (an ``acos`` half-angle) is exactly
+# the segment an endpoint-only test can miss -- a middle arc off by a full turn
+# (2*pi*r) lands on the same point. This oracle rebuilds the three mutually
+# tangent turning circles from scratch and derives each arc length by plain
+# angle differencing, wholly independent of the closed-form solver.
+
+
+def _ccc_arc(
+    center: tuple[float, float],
+    p_from: tuple[float, float],
+    p_to: tuple[float, float],
+    kind: str,
+    r: float,
+) -> float:
+    """Arc length along a circle from ``p_from`` to ``p_to`` for one turn sense.
+
+    ``kind`` is ``"L"`` (counter-clockwise) or ``"R"`` (clockwise). The swept
+    angle is the minimal non-negative rotation in ``[0, 2*pi)`` carrying
+    ``p_from`` to ``p_to`` in that sense, so a solver arc inflated by a whole
+    turn does not collapse onto the same value.
+    """
+    fa = math.atan2(p_from[1] - center[1], p_from[0] - center[0])
+    ta = math.atan2(p_to[1] - center[1], p_to[0] - center[0])
+    sweep = normalize(ta - fa) if kind == "L" else normalize(fa - ta)
+    return r * sweep
+
+
+def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[tuple[str, float]]:
+    """Build a CCC (RLR/LRL) path from tangent-circle geometry, solver-free.
+
+    The first and last turning circles are fixed by ``start``/``goal`` (both
+    ``R`` for RLR, both ``L`` for LRL). The middle circle has radius ``r`` and
+    is tangent to both, so its center lies at distance ``2*r`` from each outer
+    center -- an intersection of two radius-``2*r`` circles, feasible when the
+    outer centers are at most ``4*r`` apart. The two intersections give two
+    candidate maneuvers; Dubins selects the reflex branch (middle arc in
+    ``[pi, 2*pi)``, from ``p = normalize(-acos(...))`` in the canonical solver),
+    which is always the candidate with the *larger* middle arc. Choosing by that
+    geometric rule -- never by comparing against the solver's lengths -- keeps
+    the cross-check honest.
+    """
+    if word is PathType.RLR:
+        c1, c3, k_out, k_mid = _right_center(start, r), _right_center(goal, r), "R", "L"
+    elif word is PathType.LRL:
+        c1, c3, k_out, k_mid = _left_center(start, r), _left_center(goal, r), "L", "R"
+    else:
+        raise ValueError(word)
+    dx, dy = c3[0] - c1[0], c3[1] - c1[1]
+    sep = math.hypot(dx, dy)
+    # Near-coincident outer centers leave the perpendicular direction (dx/sep,
+    # dy/sep) ill-conditioned, so reject on a small threshold, not just exact 0.
+    if sep < 1e-9:
+        raise ValueError(f"near-coincident outer turning circles (sep={sep}): CCC oracle undefined")
+    mx, my = (c1[0] + c3[0]) / 2.0, (c1[1] + c3[1]) / 2.0
+    half = math.sqrt(max(0.0, (2.0 * r) ** 2 - (sep / 2.0) ** 2))  # perpendicular offset
+    ux, uy = -dy / sep, dx / sep  # unit perpendicular to the c1->c3 line
+    best: list[tuple[str, float]] | None = None
+    best_mid = -math.inf
+    for c2 in ((mx + half * ux, my + half * uy), (mx - half * ux, my - half * uy)):
+        t1 = ((c1[0] + c2[0]) / 2.0, (c1[1] + c2[1]) / 2.0)  # start<->mid tangent point
+        t2 = ((c2[0] + c3[0]) / 2.0, (c2[1] + c3[1]) / 2.0)  # mid<->goal tangent point
+        mid = _ccc_arc(c2, t1, t2, k_mid, r)
+        segs = [
+            (k_out, _ccc_arc(c1, (start.x, start.y), t1, k_out, r)),
+            (k_mid, mid),
+            (k_out, _ccc_arc(c3, t2, (goal.x, goal.y), k_out, r)),
+        ]
+        if mid > best_mid:  # keep the reflex (larger middle arc) branch
+            best, best_mid = segs, mid
+    assert best is not None
+    return best
+
+
+_CCC_FIXED = [
+    (Config(0.0, 0.0, 0.5), Config(1.5, 0.8, 2.3), 1.4),
+    (Config(-1.0, 2.0, 1.0), Config(1.0, 1.5, -0.5), 1.6),
+    (Config(2.0, 2.0, 0.0), Config(2.0, 2.0, math.pi), 1.5),  # in-place U-turn
+]
+
+
+@pytest.mark.parametrize("start,goal,radius", _CCC_FIXED)
+@pytest.mark.parametrize("word", [PathType.RLR, PathType.LRL])
+def test_ccc_segment_lengths_match_tangent_oracle(
+    word: PathType, start: Config, goal: Config, radius: float
+) -> None:
+    sol = solve_all(start, goal, radius)[word]
+    if not isinstance(sol, DubinsPath):
+        pytest.skip(f"{word.value} infeasible for this fixture")
+    segs = _ccc_oracle(word, start, goal, radius)
+    # Self-validate the oracle: its own segments must reconstruct the goal.
+    ex, ey, eth = _fwd(start, segs, radius)
+    assert ex == pytest.approx(goal.x, abs=1e-9)
+    assert ey == pytest.approx(goal.y, abs=1e-9)
+    assert _angle_diff(eth, goal.theta) < 1e-9
+    # Cross-check the solver's per-segment lengths -- including the reflex middle
+    # arc -- against the oracle. A middle arc off by 2*pi*r would fail here even
+    # though it survives the endpoint tests.
+    for seg, (_kind, length) in zip(sol.segments, segs, strict=True):
+        assert seg.length == pytest.approx(length, abs=1e-9)
+
+
+def test_ccc_segment_lengths_match_tangent_oracle_random() -> None:
+    # A plain [-10, 10] sweep is useless for CCC: the outer circles are almost
+    # always more than 4*r apart, so every word is infeasible and skips. Place
+    # the goal within ~4*r of the start so RLR/LRL are feasible often enough to
+    # exercise the reflex middle arc across many geometries.
+    rng = random.Random(20260720)
+    checked = 0
+    for _ in range(200):
+        start = Config(rng.uniform(-5, 5), rng.uniform(-5, 5), rng.uniform(0, _TAU))
+        r = rng.uniform(0.5, 3.0)
+        ang = rng.uniform(0, _TAU)
+        dist = rng.uniform(0.0, 4.0 * r)
+        goal = Config(
+            start.x + dist * math.cos(ang),
+            start.y + dist * math.sin(ang),
+            rng.uniform(0, _TAU),
+        )
+        sols = solve_all(start, goal, r)
+        for word in (PathType.RLR, PathType.LRL):
+            sol = sols[word]
+            if not isinstance(sol, DubinsPath):
+                continue
+            try:
+                segs = _ccc_oracle(word, start, goal, r)
+            except ValueError:
+                continue  # coincident outer centers: oracle undefined
+            ex, ey, eth = _fwd(start, segs, r)
+            assert ex == pytest.approx(goal.x, abs=1e-9)  # oracle self-check
+            assert ey == pytest.approx(goal.y, abs=1e-9)
+            assert _angle_diff(eth, goal.theta) < 1e-9
+            for seg, (_kind, length) in zip(sol.segments, segs, strict=True):
+                assert seg.length == pytest.approx(length, abs=1e-9)
+            checked += 1
+    assert checked > 20  # coverage guard: must not silently skip everything
