@@ -633,8 +633,10 @@ def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[t
     """
     if word is PathType.RLR:
         c1, c3, k_out, k_mid = _right_center(start, r), _right_center(goal, r), "R", "L"
-    else:
+    elif word is PathType.LRL:
         c1, c3, k_out, k_mid = _left_center(start, r), _left_center(goal, r), "L", "R"
+    else:
+        raise ValueError(word)
     dx, dy = c3[0] - c1[0], c3[1] - c1[1]
     sep = math.hypot(dx, dy)
     # Near-coincident outer centers leave the perpendicular direction (dx/sep,
