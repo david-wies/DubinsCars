@@ -14,7 +14,10 @@ Two levels of agreement are asserted:
 * **Per-word closed form** -- our six word solvers against
   ``easydubins.dubin_path.general_planner`` on the *same* canonical
   ``(alpha, beta, d)``. This pins the individual closed forms, including which
-  words are geometrically infeasible for a given scenario.
+  words are geometrically infeasible for a given scenario. The per-word level
+  feeds our canonical ``(alpha, beta, d)`` directly to easydubins, so it relies
+  on easydubins sharing that exact convention, guarded by the
+  ``easydubins>=1.3,<2`` version pin in ``pyproject.toml``.
 
 Agreement between the two independent implementations is exact to floating
 point (observed max diff ~1e-13 over thousands of cases), so ``1e-9`` is a
@@ -115,14 +118,19 @@ def test_per_word_matches_easydubins(
     ours = solver(alpha, beta, d)
     theirs = ed.general_planner(path_type.value, alpha, beta, d)
 
-    # Feasibility must agree: both ``None`` or both a solution.
+    # Feasibility must agree: both ``None`` or both a solution. The fixed seed
+    # keeps the case list clear of exact existence boundaries (p_sq ~ 0 for
+    # LSR/RSL, |tmp| ~ 1 for CCC), so this tolerance-free compare is safe today;
+    # a case landing within float-noise of a boundary is the one spot where the
+    # two algebraically-identical impls could legitimately round opposite ways
+    # and disagree here.
     assert (ours is None) == (theirs is None), (
         f"{path_type.value} feasibility disagreement: ours={ours!r} theirs={theirs!r}"
     )
     if ours is None:
         return
 
-    ed_path = theirs[0]  # (path=[t, p, q], mode, cost)
+    ed_path = theirs[0]  # theirs = (path=[t, p, q], mode, cost); [0] is the [t, p, q] list
     for ours_seg, ed_seg, name in zip(ours, ed_path, ("t", "p", "q"), strict=True):
         assert ours_seg == pytest.approx(ed_seg, abs=_ABS_TOL), (
             f"{path_type.value} segment {name} differs"
@@ -138,7 +146,10 @@ def _is_length_tie(solutions: Mapping[PathType, object], ed_len: float) -> bool:
     """True if two distinct words share the (near-)minimum length for this case.
 
     A word-name mismatch is only acceptable when the total lengths tie, in which
-    case either library may pick either winner.
+    case either library may pick either winner. The tie window
+    ``abs(length - ed_len) < 1e-6`` is intentionally looser than ``_ABS_TOL``
+    (1e-9): a genuine length tie can sit anywhere in float noise, so the tie
+    test uses a wider window than the exact-match assertion.
     """
     lengths = [sol.length for sol in solutions.values() if isinstance(sol, DubinsPath)]
     near_min = [length for length in lengths if abs(length - ed_len) < 1e-6]
