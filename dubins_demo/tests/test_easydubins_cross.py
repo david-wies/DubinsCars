@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Mapping
 
 import pytest
 
@@ -79,9 +80,10 @@ def test_shortest_path_matches_easydubins(case: tuple[Config, Config, float]) ->
     """Our shortest path agrees with easydubins on word and total length."""
     start, goal, radius = case
 
-    best = shortest(solve_all(start, goal, radius))
+    best_solutions = solve_all(start, goal, radius)
+    best = shortest(best_solutions)
     assert best is not None, "Dubins paths always exist between finite configs"
-    our_len = _length(solve_all(start, goal, radius)[best])
+    our_len = _length(best_solutions[best])
 
     ed_mode, ed_lengths, _ = ed.dubins_path(
         (start.x, start.y, start.theta), (goal.x, goal.y, goal.theta), radius
@@ -90,10 +92,10 @@ def test_shortest_path_matches_easydubins(case: tuple[Config, Config, float]) ->
     ed_len = sum(abs(seg) for seg in ed_lengths)
 
     assert our_len == pytest.approx(ed_len, abs=_ABS_TOL)
-    # The word can legitimately differ only on an exact length tie; guard the
-    # word equality on the lengths being distinct enough to have a unique winner.
-    if abs(our_len - ed_len) < _ABS_TOL:
-        assert best.value == ed_word or _is_length_tie(start, goal, radius, ed_len)
+    # The word can legitimately differ only on an exact length tie; the length
+    # assertion above already pins our_len to ed_len, so the word must match
+    # unless two distinct words share the (near-)minimum length.
+    assert best.value == ed_word or _is_length_tie(best_solutions, ed_len)
 
 
 @pytest.mark.parametrize("case", _ALL_CASES, ids=_case_id)
@@ -132,14 +134,12 @@ def _length(solution: object) -> float:
     return solution.length
 
 
-def _is_length_tie(start: Config, goal: Config, radius: float, ed_len: float) -> bool:
+def _is_length_tie(solutions: Mapping[PathType, object], ed_len: float) -> bool:
     """True if two distinct words share the (near-)minimum length for this case.
 
     A word-name mismatch is only acceptable when the total lengths tie, in which
     case either library may pick either winner.
     """
-    lengths = [
-        sol.length for sol in solve_all(start, goal, radius).values() if isinstance(sol, DubinsPath)
-    ]
+    lengths = [sol.length for sol in solutions.values() if isinstance(sol, DubinsPath)]
     near_min = [length for length in lengths if abs(length - ed_len) < 1e-6]
     return len(near_min) >= 2
