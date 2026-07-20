@@ -637,6 +637,8 @@ def _ccc_oracle(word: PathType, start: Config, goal: Config, r: float) -> list[t
         c1, c3, k_out, k_mid = _left_center(start, r), _left_center(goal, r), "L", "R"
     dx, dy = c3[0] - c1[0], c3[1] - c1[1]
     sep = math.hypot(dx, dy)
+    if sep == 0.0:
+        raise ValueError("coincident outer turning circles (sep == 0): CCC oracle undefined")
     mx, my = (c1[0] + c3[0]) / 2.0, (c1[1] + c3[1]) / 2.0
     half = math.sqrt(max(0.0, (2.0 * r) ** 2 - (sep / 2.0) ** 2))  # perpendicular offset
     ux, uy = -dy / sep, dx / sep  # unit perpendicular to the c1->c3 line
@@ -683,3 +685,39 @@ def test_ccc_segment_lengths_match_tangent_oracle(
     # though it survives the endpoint tests.
     for seg, (_kind, length) in zip(sol.segments, segs, strict=True):
         assert seg.length == pytest.approx(length, abs=1e-9)
+
+
+def test_ccc_segment_lengths_match_tangent_oracle_random() -> None:
+    # A plain [-10, 10] sweep is useless for CCC: the outer circles are almost
+    # always more than 4*r apart, so every word is infeasible and skips. Place
+    # the goal within ~4*r of the start so RLR/LRL are feasible often enough to
+    # exercise the reflex middle arc across many geometries.
+    rng = random.Random(20260720)
+    checked = 0
+    for _ in range(200):
+        start = Config(rng.uniform(-5, 5), rng.uniform(-5, 5), rng.uniform(0, _TAU))
+        r = rng.uniform(0.5, 3.0)
+        ang = rng.uniform(0, _TAU)
+        dist = rng.uniform(0.0, 4.0 * r)
+        goal = Config(
+            start.x + dist * math.cos(ang),
+            start.y + dist * math.sin(ang),
+            rng.uniform(0, _TAU),
+        )
+        sols = solve_all(start, goal, r)
+        for word in (PathType.RLR, PathType.LRL):
+            sol = sols[word]
+            if not isinstance(sol, DubinsPath):
+                continue
+            try:
+                segs = _ccc_oracle(word, start, goal, r)
+            except ValueError:
+                continue  # coincident outer centers: oracle undefined
+            ex, ey, eth = _fwd(start, segs, r)
+            assert ex == pytest.approx(goal.x, abs=1e-9)  # oracle self-check
+            assert ey == pytest.approx(goal.y, abs=1e-9)
+            assert _angle_diff(eth, goal.theta) < 1e-9
+            for seg, (_kind, length) in zip(sol.segments, segs, strict=True):
+                assert seg.length == pytest.approx(length, abs=1e-9)
+            checked += 1
+    assert checked > 20  # coverage guard: must not silently skip everything
