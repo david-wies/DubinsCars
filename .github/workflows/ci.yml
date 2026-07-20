@@ -48,6 +48,14 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install package + dev dependencies
         run: pip install -e ".[dev]"
+      # The easydubins cross-check is optional on newer interpreters: if no
+      # compatible wheel exists the tests skip (pytest.importorskip) rather than
+      # fail the matrix. But on the 3.12 floor the install is REQUIRED so a real
+      # packaging break (bad extra, wrong pin, upstream rename) fails loudly
+      # instead of silently skipping the oracle on every leg while CI stays green.
+      - name: Install cross-check oracle (required on 3.12, best-effort elsewhere)
+        continue-on-error: ${{ matrix.python-version != '3.12' }}
+        run: pip install -e ".[crosscheck]"
       # Only the pure math-core suite (dubins_demo/tests). The Tkinter UI is
       # explicitly not auto-tested per spec T-5 — see the manual checklist in
       # docs/design/2026-07-17-dubins-demo-design.md, section 7.2.

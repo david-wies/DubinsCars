@@ -118,6 +118,37 @@ def test_partial_write_failure_preserves_existing_file(
     assert list(tmp_path.glob("*.tmp")) == []
 
 
+def test_save_scenario_replace_failure_preserves_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An os.replace failure must leave the prior good file intact, no .tmp behind.
+
+    Mirrors the CSV path's os.replace-failure test but for ``save_scenario``,
+    whose contract wraps the raw :class:`OSError` into a :class:`ScenarioError`.
+    Patching ``os.replace`` (not ``json.dump``) exercises the branch after the
+    temp file is fully written, where the atomic rename itself fails.
+    """
+    scenario = _make_scenario()
+    target = tmp_path / "scenario.json"
+
+    # Establish a known-good file that must survive a failed re-save.
+    good = '{"kept": true}\n'
+    target.write_text(good, encoding="utf-8")
+
+    def boom(src: object, dst: object, *args: object, **kwargs: object) -> None:
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(os, "replace", boom)
+
+    with pytest.raises(ScenarioError):
+        save_scenario(scenario, target)
+
+    # Original content untouched (atomic replace never landed) ...
+    assert target.read_text(encoding="utf-8") == good
+    # ... and the fully-written temp file was cleaned up.
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
 def test_to_update_kwargs_matches_load(tmp_path: Path) -> None:
     scenario = _make_scenario()
     target = tmp_path / "scenario.json"
@@ -302,13 +333,27 @@ def test_top_level_non_object_json_raises() -> None:
         dict_to_scenario([1, 2, 3])
 
 
-def test_invalid_display_enum_raises() -> None:
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("heading_convention", "sideways"),
+        ("angle_unit", "gradians"),
+    ],
+    ids=["heading_convention", "angle_unit"],
+)
+def test_invalid_display_enum_raises(field: str, bad_value: str) -> None:
+    # ``_display_from_dict`` has two symmetric try/except blocks -- one per enum.
+    # Corrupting each field in turn exercises both the ``Convention`` and the
+    # ``Unit`` failure branch, and asserts each reports a sensible message that
+    # echoes the bad value and enumerates the valid options.
     document = scenario_to_dict(_make_scenario())
-    document["display"]["angle_unit"] = "gradians"
+    document["display"][field] = bad_value
 
     with pytest.raises(ScenarioError) as excinfo:
         dict_to_scenario(document)
-    assert "gradians" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert bad_value in message
+    assert "expected one of" in message
 
 
 def test_load_bad_document_does_not_mutate_live_scenario(tmp_path: Path) -> None:
@@ -388,6 +433,32 @@ def test_csv_export_accepts_str_path(tmp_path: Path) -> None:
     export_waypoints_csv(str(target), path)
 
     assert target.exists()
+
+
+@pytest.mark.parametrize("bad_step", [0.0, float("nan")], ids=["zero", "nan"])
+def test_csv_export_invalid_step_raises_and_preserves_existing_file(
+    tmp_path: Path, bad_step: float
+) -> None:
+    """An invalid sampling ``step`` raises ValueError without touching any file.
+
+    Sampling happens before the temp file is opened, so a non-positive or
+    non-finite ``step`` must surface the raw :class:`ValueError` from
+    ``DubinsPath.sample`` and leave a pre-existing target -- and its directory --
+    completely undisturbed (no truncation, no stray ``.tmp``).
+    """
+    path = _feasible_path()
+    target = tmp_path / "waypoints.csv"
+
+    # Establish a known-good file that must survive a rejected export.
+    good = "x,y,theta_rad\n0.0,0.0,0.0\n"
+    target.write_text(good, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        export_waypoints_csv(target, path, step=bad_step)
+
+    # Existing file untouched, and no temp file created.
+    assert target.read_text(encoding="utf-8") == good
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_csv_export_partial_write_failure_preserves_existing_file(
