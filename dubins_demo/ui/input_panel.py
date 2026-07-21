@@ -32,6 +32,7 @@ from dubins_demo.core.model import Convention, FixedRadius, Scenario, Unit
 from dubins_demo.ui import theme
 
 _RADIUS_MIN = 0.1
+_RADIUS_MAX = 100000.0
 
 
 def _fmt(value: float) -> str:
@@ -213,8 +214,9 @@ class _FixedRadiusFrame:
     """Swappable radius sub-frame (EXT-2): a spinbox linked to the model.
 
     The widget drives ``FixedRadius.value`` through ``model.update`` and is
-    refreshed from the model on notification. Values below ``0.1`` are
-    clamped (FR-3). This class is intentionally self-contained so a future
+    refreshed from the model on notification. Values are clamped to
+    ``[0.1, 100000]`` (FR-3), with a status message on coercion. This class
+    is intentionally self-contained so a future
     speed/vehicle-parameter frame can replace it without touching the rest of
     the input panel.
     """
@@ -234,7 +236,7 @@ class _FixedRadiusFrame:
         self._spinbox = ttk.Spinbox(
             self.frame,
             from_=_RADIUS_MIN,
-            to=100000.0,
+            to=_RADIUS_MAX,
             increment=0.5,
             command=self._on_spin,
         )
@@ -248,7 +250,10 @@ class _FixedRadiusFrame:
         return self.model.radius_policy.min_radius()
 
     def _apply(self, value: float) -> None:
-        clamped = max(_RADIUS_MIN, value)
+        clamped = min(_RADIUS_MAX, max(_RADIUS_MIN, value))
+        if clamped != value:
+            bound = "minimum" if clamped == _RADIUS_MIN else "maximum"
+            self._status(f"Turn radius clamped to {_fmt(clamped)} m ({bound}).")
         self.model.update(radius_policy=FixedRadius(clamped))
 
     def _parse_and_apply(self) -> None:
