@@ -48,22 +48,29 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
-        # Per-notify-pass flag: _on_listener_error sets it when a panel raises,
-        # _on_model_changed reads and clears it. It lets _on_model_changed skip
-        # its own status write so it does not clobber the honest failure status
-        # set earlier in the same pass. _on_model_changed clears it defensively at
-        # entry (capture-and-clear), so it stays False between passes even if that
-        # method later raises -- see _on_model_changed.
+        # Per-notify-pass flag: _reset_refresh_flag clears it at the START of each
+        # pass (it runs first, see below), _on_listener_error sets it when any
+        # listener raises, and _on_model_changed reads it at the END of the pass
+        # (it runs last). A True tells _on_model_changed to skip its own status
+        # write so it does not clobber the honest failure status set earlier in
+        # the same pass. Clearing up front -- rather than having the last listener
+        # read-and-clear -- means a True set late in a pass cannot leak into the
+        # next one, even when _on_model_changed is itself the listener that raises.
         self._refresh_failed = False
+
+        # Registered before _build_layout so it runs FIRST in every notify pass,
+        # ahead of the panel listeners the panels add in their constructors: it
+        # resets _refresh_failed at the start of each pass.
+        self.model.add_listener(self._reset_refresh_flag)
 
         self._build_menu()
         self._build_layout()
 
         # _on_model_changed is registered after the panel listeners (added in
-        # _build_layout) so it runs last in each notify pass: panels refresh
-        # first, then App re-reads the model. Running last, it would otherwise
-        # overwrite the status set by _on_listener_error -- hence the
-        # _refresh_failed guard inside it.
+        # _build_layout) so it runs last in each notify pass: the flag is reset
+        # first, panels refresh, then App re-reads the model and consults the flag.
+        # Running last, it would otherwise overwrite the status set by
+        # _on_listener_error -- hence the _refresh_failed guard inside it.
         self.model.add_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
@@ -179,18 +186,19 @@ class App:
         self._set_status(_PANEL_REFRESH_FAILED_STATUS)
         messagebox.showerror("Panel refresh failed", str(exc))
 
-    def _on_model_changed(self) -> None:
-        # Capture-and-clear the flag first: reading it into a local and resetting
-        # self._refresh_failed immediately guarantees it is False for the next
-        # pass even if the branches below raise (a Tk error in entryconfig or the
-        # StringVar set). This listener is also the error target, so if it raised
-        # after leaving the flag set, _on_listener_error would set it again and no
-        # later run would clear it -- leaking a stale True into the next pass.
-        refresh_failed = self._refresh_failed
+    def _reset_refresh_flag(self) -> None:
+        # Registered first, so this runs at the start of every notify pass and
+        # clears the per-pass failure flag before any panel listener can set it.
+        # Because clearing is owned by this first listener -- not read-and-cleared
+        # by the last one -- a True set late in a pass (even by _on_model_changed
+        # itself raising) is wiped at the next pass instead of leaking into it. A
+        # plain attribute write, it cannot raise, so the reset never fails.
         self._refresh_failed = False
+
+    def _on_model_changed(self) -> None:
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
-        if refresh_failed:
+        if self._refresh_failed:
             # A panel raised earlier in this notify pass; _on_listener_error set
             # the honest failure status. Leave it in place -- overwriting it with
             # "Ready." or the infeasibility notice would defeat that report for
