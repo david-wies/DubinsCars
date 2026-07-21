@@ -188,6 +188,10 @@ class App:
             # edits, drags, and toggles). Clear the flag for the next pass; it is
             # always False between passes because this listener runs last.
             self._refresh_failed = False
+            # The failure notice, not the infeasibility notice, is on the bar, so
+            # keep _no_feasible_shown honest -- otherwise a stale True would make
+            # the next clean feasible pass stamp a spurious "Ready." over it.
+            self._no_feasible_shown = False
             return
         if not has_feasible:
             self._set_status("No feasible Dubins path for this scenario.")
