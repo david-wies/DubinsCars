@@ -32,6 +32,7 @@ from dubins_demo.ui.plot_canvas import PlotCanvas
 
 _EXPORT_LABEL = "Export CSV…"
 _DEFAULT_STEP = 0.05
+_PANEL_REFRESH_FAILED_STATUS = "A panel failed to refresh — see the error dialog."
 
 
 class App:
@@ -55,6 +56,11 @@ class App:
         self._build_menu()
         self._build_layout()
 
+        # _on_model_changed is registered after the panel listeners (added in
+        # _build_layout) so it runs last in each notify pass: panels refresh
+        # first, then App re-reads the model. Because it runs last it can also
+        # overwrite the status set by _on_listener_error, which is why _on_load
+        # re-asserts the honest failure status after a failed refresh.
         self.model.add_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
@@ -166,7 +172,7 @@ class App:
         status instead of overwriting it with a success line.
         """
         self._refresh_failed = True
-        self._set_status("A panel failed to refresh — see the error dialog.")
+        self._set_status(_PANEL_REFRESH_FAILED_STATUS)
         messagebox.showerror("Panel refresh failed", str(exc))
 
     def _on_model_changed(self) -> None:
@@ -216,9 +222,12 @@ class App:
         self._refresh_failed = False
         self.model.update(**loaded.to_update_kwargs())
         if self._refresh_failed:
-            # A panel raised while refreshing: _on_listener_error already set the
-            # honest "failed to refresh" status and opened its dialog. Leave that
-            # in place rather than falsely reporting a clean load.
+            # A panel raised while refreshing: _on_listener_error already showed
+            # the dialog, but _on_model_changed (the last listener) may have
+            # stamped "Ready." or the infeasibility notice over the honest status
+            # during update(). Re-assert it rather than falsely reporting a clean
+            # load.
+            self._set_status(_PANEL_REFRESH_FAILED_STATUS)
             return
         # update() has already fired _on_model_changed, which sets the
         # infeasibility notice for an unsolvable scenario. Overwriting it with a
