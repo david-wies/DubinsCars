@@ -151,6 +151,7 @@ class Scenario:
         self._animation_speed = _validate_animation_speed(animation_speed)
 
         self._listeners: list[Callable[[], None]] = []
+        self._final_listener: Callable[[bool], None] | None = None
         self._error_handler: Callable[[BaseException], None] | None = None
         self._solutions: dict[PathType, DubinsPath | Infeasible] = {}
         self._solutions_view: Mapping[PathType, DubinsPath | Infeasible] = MappingProxyType(
@@ -223,6 +224,20 @@ class Scenario:
         """Register a zero-argument callback fired after each :meth:`update`."""
         self._listeners.append(cb)
 
+    def set_final_listener(self, cb: Callable[[bool], None] | None) -> None:
+        """Register the single callback fired *last* in every notify pass.
+
+        Unlike :meth:`add_listener` callbacks, the final listener runs after all
+        ordinary listeners and receives one argument: ``True`` if any ordinary
+        listener raised during this pass, ``False`` otherwise. This lets a UI
+        render an honest post-refresh status (e.g. keep a "panel failed" notice
+        instead of overwriting it) without depending on listener registration
+        order or reading model internals. Its own failure is isolated exactly
+        like an ordinary listener's. Pass ``None`` to clear it; a later call
+        replaces any previously registered final listener.
+        """
+        self._final_listener = cb
+
     def set_error_handler(self, handler: Callable[[BaseException], None] | None) -> None:
         """Register a callback invoked when a listener raises during notify.
 
@@ -237,7 +252,7 @@ class Scenario:
         """
         self._error_handler = handler
 
-    def update(self, **changes: object) -> None:
+    def update(self, **changes: object) -> bool:
         """Apply field changes, re-solve, then notify all listeners exactly once.
 
         Only the settable input/display fields in :attr:`_SETTABLE` may be
@@ -246,6 +261,11 @@ class Scenario:
         and the values are validated *before* any field is written, so a
         rejected call (unknown field or ill-typed value) leaves the model
         completely unmutated (no partial update, no stale caches).
+
+        Returns ``True`` if every listener refreshed cleanly, ``False`` if one
+        raised (its exception is isolated and routed to the error handler, never
+        re-raised). A batched caller can use this to tell an honest refresh
+        failure apart from a clean update.
         """
         for name, value in changes.items():
             if name not in self._SETTABLE:
@@ -254,7 +274,7 @@ class Scenario:
         for name, value in changes.items():
             setattr(self, f"_{name}", value)
         self._resolve()
-        self._notify()
+        return self._notify()
 
     def set_animation_speed(self, speed: float) -> None:
         """Set playback speed *without* re-solving or notifying.
@@ -279,18 +299,32 @@ class Scenario:
         else:
             self._highlighted = shortest(self._solutions)
 
-    def _notify(self) -> None:
+    def _notify(self) -> bool:
         # Isolate listeners: one raising view must not strand the others
         # half-refreshed, nor let its exception escape update() past the point
         # where the model has already re-solved. A registered error handler
         # (set by the UI) surfaces the failure to the user; with none registered
         # -- headless runs and tests -- fall back to a best-effort stderr
         # traceback. Either way the exception is swallowed, never re-raised.
+        # Returns False if any listener raised, so update() can report it.
+        raised = False
         for cb in self._listeners:
             try:
                 cb()
             except Exception as exc:  # noqa: BLE001 - deliberate per-listener isolation
+                raised = True
                 self._report_listener_error(exc)
+        # The final listener runs last, after every ordinary listener, and is
+        # told whether any of them raised -- so a UI status pass can react to a
+        # failed refresh without inferring listener order. It is isolated the
+        # same way; its own failure also flips the reported result to False.
+        if self._final_listener is not None:
+            try:
+                self._final_listener(raised)
+            except Exception as exc:  # noqa: BLE001 - deliberate per-listener isolation
+                raised = True
+                self._report_listener_error(exc)
+        return not raised
 
     def _report_listener_error(self, exc: BaseException) -> None:
         """Route a swallowed listener error to the handler, else to stderr.

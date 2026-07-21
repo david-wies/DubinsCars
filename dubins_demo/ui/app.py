@@ -32,6 +32,7 @@ from dubins_demo.ui.plot_canvas import PlotCanvas
 
 _EXPORT_LABEL = "Export CSV…"
 _DEFAULT_STEP = 0.05
+_PANEL_REFRESH_FAILED_STATUS = "A panel failed to refresh — see the error dialog."
 
 
 class App:
@@ -47,11 +48,19 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
+        # Tracks whether the panel-refresh failure notice is currently on the bar,
+        # mirroring _no_feasible_shown, so a later clean pass knows to clear it.
+        self._refresh_failed_shown = False
 
         self._build_menu()
         self._build_layout()
 
-        self.model.add_listener(self._on_model_changed)
+        # _on_model_changed runs LAST in every notify pass and is told whether any
+        # panel listener raised -- so it can leave an honest "panel failed" status
+        # in place instead of overwriting it. The model guarantees the final
+        # listener runs after the panel listeners (registered in _build_layout),
+        # so this needs no ordering assumption or read of model internals.
+        self.model.set_final_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
 
@@ -156,21 +165,44 @@ class App:
         bar flags it and a dialog carries the detail, matching how load/save
         errors are shown. Other panels are still refreshed (the model isolates
         each listener); this only reports the one that broke.
+
+        :meth:`_on_model_changed` is passed ``True`` by the model when it runs
+        last in this pass, so it leaves this honest status in place instead of
+        overwriting it with "Ready."/the infeasibility notice. :meth:`_refresh_failed_shown`
+        keeps the notice honest across later passes. :meth:`Scenario.update` also
+        returns ``False``, which lets :meth:`_on_load` skip its success line.
         """
-        self._set_status("A panel failed to refresh — see the error dialog.")
+        self._set_status(_PANEL_REFRESH_FAILED_STATUS)
+        self._refresh_failed_shown = True
         messagebox.showerror("Panel refresh failed", str(exc))
 
-    def _on_model_changed(self) -> None:
+    def _on_model_changed(self, refresh_failed: bool = False) -> None:
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
+        if refresh_failed:
+            # A panel raised earlier in this notify pass; _on_listener_error set
+            # the honest failure status. Leave it in place -- overwriting it with
+            # "Ready." or the infeasibility notice would defeat that report for
+            # every update() caller that does not re-assert afterwards (the panel
+            # edits, drags, and toggles).
+            # The failure notice, not the infeasibility notice, is on the bar, so
+            # keep _no_feasible_shown honest -- otherwise a stale True would make
+            # the next clean feasible pass stamp a spurious "Ready." over it.
+            self._no_feasible_shown = False
+            return
         if not has_feasible:
             self._set_status("No feasible Dubins path for this scenario.")
             self._no_feasible_shown = True
-        elif self._no_feasible_shown:
-            # Clear only the stale infeasibility notice; leave any other status
-            # (mouse coords, "Loaded…") untouched.
+            # This line overwrites any failure notice left on the bar, so the
+            # failure tracker is no longer accurate -- keep it honest.
+            self._refresh_failed_shown = False
+        elif self._no_feasible_shown or self._refresh_failed_shown:
+            # A stale notice we own (infeasibility or panel-refresh failure) is on
+            # the bar and this pass succeeded cleanly; clear it. Leave any other
+            # status (mouse coords, "Loaded…") untouched.
             self._set_status("Ready.")
             self._no_feasible_shown = False
+            self._refresh_failed_shown = False
 
     # -- file menu handlers --------------------------------------------------
 
@@ -202,7 +234,12 @@ class App:
             # The model is never touched on a failed load (FR-23-style safety).
             messagebox.showerror("Load failed", str(exc))
             return
-        self.model.update(**loaded.to_update_kwargs())
+        if not self.model.update(**loaded.to_update_kwargs()):
+            # A panel raised while refreshing: _on_listener_error already showed
+            # the dialog and set the honest status, which _on_model_changed left
+            # in place. That status is already on the bar, so just skip the
+            # success line below (it would falsely report a clean load).
+            return
         # update() has already fired _on_model_changed, which sets the
         # infeasibility notice for an unsolvable scenario. Overwriting it with a
         # bare success line would hide that the loaded file has no path, so

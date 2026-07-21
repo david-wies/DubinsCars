@@ -146,7 +146,8 @@ class Scenario:
     animation_speed: float              # m/s
 
     def add_listener(cb: Callable[[], None]) -> None
-    def update(**changes) -> None       # set fields, re-solve, notify once
+    def set_final_listener(cb: Callable[[bool], None] | None) -> None  # runs last; arg = any listener raised
+    def update(**changes) -> bool       # set fields, re-solve, notify once; False if a listener raised
     solutions: dict[PathType, DubinsPath | Infeasible]   # cached, refreshed by update
     highlighted: PathType | None        # selected if feasible else shortest
 ```
@@ -310,8 +311,9 @@ Self-contained (inline CSS/JS, no CDN). Structure:
 4. Table sort, row click highlights; infeasible rows grayed with reason.
 5. Circles toggle; animation plays, pauses, resets on edit; speed change works.
 6. Save → load round-trip restores scenario exactly; CSV opens in spreadsheet.
-7. Help opens in browser; TOC links and search work offline.
-8. Degenerate: drag goal onto start — no crash, sensible table.
+7. A panel that raises during refresh → error dialog appears **and** status bar shows "A panel failed to refresh — see the error dialog."; it must **not** show "Loaded …", "Ready.", or "No feasible Dubins path…". Verify on **Load** (both a feasible and an infeasible loaded scenario) **and** on a plain field edit / drag / toggle — every `model.update()` trigger, not just Load, must keep the honest status.
+8. Help opens in browser; TOC links and search work offline.
+9. Degenerate: drag goal onto start — no crash, sensible table.
 
 ## 8. Dependencies
 
