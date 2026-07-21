@@ -320,6 +320,27 @@ def test_notify_falls_back_to_stderr_without_handler(
     assert "RuntimeError" in capsys.readouterr().err
 
 
+def test_update_returns_true_on_clean_notify() -> None:
+    # A clean update whose listeners all refresh without raising reports success
+    # so callers can gate honest load/refresh status on the return value.
+    scenario = _make_scenario()
+    scenario.add_listener(lambda: None)
+
+    assert scenario.update(goal=Config(8.0, -3.0, 0.0)) is True
+
+
+def test_update_returns_false_when_listener_raises(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # When any listener raises, update() reports failure (False) even though the
+    # exception is isolated to stderr and never re-raised out of update().
+    scenario = _make_scenario()
+    scenario.add_listener(lambda: (_ for _ in ()).throw(RuntimeError("view blew up")))
+
+    assert scenario.update(goal=Config(8.0, -3.0, 0.0)) is False
+    assert "RuntimeError" in capsys.readouterr().err  # failure traced, not swallowed
+
+
 def test_notify_raising_error_handler_does_not_propagate(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

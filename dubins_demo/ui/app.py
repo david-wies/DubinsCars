@@ -51,7 +51,9 @@ class App:
         # Per-notify-pass flag: _on_listener_error sets it when a panel raises,
         # _on_model_changed reads and clears it. It lets _on_model_changed skip
         # its own status write so it does not clobber the honest failure status
-        # set earlier in the same pass. False between passes (see _on_model_changed).
+        # set earlier in the same pass. _on_model_changed clears it defensively at
+        # entry (capture-and-clear), so it stays False between passes even if that
+        # method later raises -- see _on_model_changed.
         self._refresh_failed = False
 
         self._build_menu()
@@ -178,16 +180,22 @@ class App:
         messagebox.showerror("Panel refresh failed", str(exc))
 
     def _on_model_changed(self) -> None:
+        # Capture-and-clear the flag first: reading it into a local and resetting
+        # self._refresh_failed immediately guarantees it is False for the next
+        # pass even if the branches below raise (a Tk error in entryconfig or the
+        # StringVar set). This listener is also the error target, so if it raised
+        # after leaving the flag set, _on_listener_error would set it again and no
+        # later run would clear it -- leaking a stale True into the next pass.
+        refresh_failed = self._refresh_failed
+        self._refresh_failed = False
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
-        if self._refresh_failed:
+        if refresh_failed:
             # A panel raised earlier in this notify pass; _on_listener_error set
             # the honest failure status. Leave it in place -- overwriting it with
             # "Ready." or the infeasibility notice would defeat that report for
             # every update() caller that does not re-assert afterwards (the panel
-            # edits, drags, and toggles). Clear the flag for the next pass; it is
-            # always False between passes because this listener runs last.
-            self._refresh_failed = False
+            # edits, drags, and toggles).
             # The failure notice, not the infeasibility notice, is on the bar, so
             # keep _no_feasible_shown honest -- otherwise a stale True would make
             # the next clean feasible pass stamp a spurious "Ready." over it.
