@@ -48,6 +48,9 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
+        # Tracks whether the panel-refresh failure notice is currently on the bar,
+        # mirroring _no_feasible_shown, so a later clean pass knows to clear it.
+        self._refresh_failed_shown = False
         # Per-notify-pass flag: _reset_refresh_flag clears it at the START of each
         # pass (it runs first, see below), _on_listener_error sets it when any
         # listener raises, and _on_model_changed reads it at the END of the pass
@@ -72,6 +75,28 @@ class App:
         # Running last, it would otherwise overwrite the status set by
         # _on_listener_error -- hence the _refresh_failed guard inside it.
         self.model.add_listener(self._on_model_changed)
+
+        # Honest-load-status correctness depends on the listener ORDER, which
+        # nothing else enforces: _reset_refresh_flag must run first (clearing the
+        # per-pass flag) and _on_model_changed must run last (reading it). A future
+        # panel that registers a listener after _on_model_changed, or a reorder of
+        # the add_listener calls above, would silently break the failure status --
+        # and the UI is intentionally untested (spec T-5), so no test would catch
+        # it. Assert the bookends here as a cheap self-check. Reading the model's
+        # private _listeners is a deliberate internal peek: this is the one place
+        # that owns the ordering invariant, so it verifies it directly.
+        listeners = self.model._listeners
+        assert listeners and listeners[0] is self._reset_refresh_flag, (
+            "_reset_refresh_flag must be the FIRST model listener so it clears "
+            "_refresh_failed before any panel can set it; got "
+            f"{listeners[0] if listeners else None!r}"
+        )
+        assert listeners[-1] is self._on_model_changed, (
+            "_on_model_changed must be the LAST model listener so it reads "
+            "_refresh_failed after every panel has refreshed; got "
+            f"{listeners[-1]!r}"
+        )
+
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
 
@@ -184,6 +209,7 @@ class App:
         """
         self._refresh_failed = True
         self._set_status(_PANEL_REFRESH_FAILED_STATUS)
+        self._refresh_failed_shown = True
         messagebox.showerror("Panel refresh failed", str(exc))
 
     def _reset_refresh_flag(self) -> None:
@@ -212,11 +238,16 @@ class App:
         if not has_feasible:
             self._set_status("No feasible Dubins path for this scenario.")
             self._no_feasible_shown = True
-        elif self._no_feasible_shown:
-            # Clear only the stale infeasibility notice; leave any other status
-            # (mouse coords, "Loaded…") untouched.
+            # This line overwrites any failure notice left on the bar, so the
+            # failure tracker is no longer accurate -- keep it honest.
+            self._refresh_failed_shown = False
+        elif self._no_feasible_shown or self._refresh_failed_shown:
+            # A stale notice we own (infeasibility or panel-refresh failure) is on
+            # the bar and this pass succeeded cleanly; clear it. Leave any other
+            # status (mouse coords, "Loaded…") untouched.
             self._set_status("Ready.")
             self._no_feasible_shown = False
+            self._refresh_failed_shown = False
 
     # -- file menu handlers --------------------------------------------------
 
@@ -251,10 +282,8 @@ class App:
         if not self.model.update(**loaded.to_update_kwargs()):
             # A panel raised while refreshing: _on_listener_error already showed
             # the dialog and set the honest status, which _on_model_changed left
-            # in place. Skip the success line below (it would falsely report a
-            # clean load) and re-assert the honest status defensively in case a
-            # later panel in the pass overwrote it.
-            self._set_status(_PANEL_REFRESH_FAILED_STATUS)
+            # in place. That status is already on the bar, so just skip the
+            # success line below (it would falsely report a clean load).
             return
         # update() has already fired _on_model_changed, which sets the
         # infeasibility notice for an unsolvable scenario. Overwriting it with a
