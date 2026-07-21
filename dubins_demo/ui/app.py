@@ -48,10 +48,6 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
-        # Set by _on_listener_error when a panel raises during a refresh, so a
-        # caller (e.g. _on_load) can tell an honest failure apart from a clean
-        # update and refrain from stamping a false success over it.
-        self._refresh_failed = False
 
         self._build_menu()
         self._build_layout()
@@ -60,7 +56,8 @@ class App:
         # _build_layout) so it runs last in each notify pass: panels refresh
         # first, then App re-reads the model. Because it runs last it can also
         # overwrite the status set by _on_listener_error, which is why _on_load
-        # re-asserts the honest failure status after a failed refresh.
+        # re-asserts the honest failure status when update() reports a failed
+        # refresh.
         self.model.add_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
@@ -167,11 +164,10 @@ class App:
         errors are shown. Other panels are still refreshed (the model isolates
         each listener); this only reports the one that broke.
 
-        The flag lets a batched operation like :meth:`_on_load` detect the
-        failure after :meth:`Scenario.update` returns and keep this honest
-        status instead of overwriting it with a success line.
+        :meth:`Scenario.update` returns ``False`` when a listener raises, which
+        lets a batched operation like :meth:`_on_load` keep this honest status
+        instead of overwriting it with a success line.
         """
-        self._refresh_failed = True
         self._set_status(_PANEL_REFRESH_FAILED_STATUS)
         messagebox.showerror("Panel refresh failed", str(exc))
 
@@ -217,11 +213,7 @@ class App:
             # The model is never touched on a failed load (FR-23-style safety).
             messagebox.showerror("Load failed", str(exc))
             return
-        # Cleared here so _on_listener_error can flag a refresh that raises
-        # during the update() below; checked afterwards to gate the success line.
-        self._refresh_failed = False
-        self.model.update(**loaded.to_update_kwargs())
-        if self._refresh_failed:
+        if not self.model.update(**loaded.to_update_kwargs()):
             # A panel raised while refreshing: _on_listener_error already showed
             # the dialog, but _on_model_changed (the last listener) may have
             # stamped "Ready." or the infeasibility notice over the honest status
