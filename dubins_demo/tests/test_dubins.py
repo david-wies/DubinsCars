@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import cast
 
 import numpy as np
 import pytest
@@ -53,6 +54,22 @@ def test_path_type_kinds() -> None:
     assert PathType.LSL.kinds == (SegmentKind.L, SegmentKind.S, SegmentKind.L)
     assert PathType.RLR.kinds == (SegmentKind.R, SegmentKind.L, SegmentKind.R)
     assert PathType.LSR.kinds == (SegmentKind.L, SegmentKind.S, SegmentKind.R)
+
+
+def test_dubins_path_rejects_wrong_segment_count() -> None:
+    # A Dubins path is exactly three segments. The tuple type enforces this
+    # statically; the kind-tuple comparison in __post_init__ backstops it at
+    # runtime (tuple equality checks length first), so a wrong-length tuple --
+    # e.g. from a solver bug -- raises rather than constructing a malformed
+    # path. cast() deliberately subverts the static type to exercise that path.
+    start = Config(0.0, 0.0, 0.0)
+    ell, ess = Segment(SegmentKind.L, 1.0), Segment(SegmentKind.S, 1.0)
+    two = cast("tuple[Segment, Segment, Segment]", (ell, ess))
+    four = cast("tuple[Segment, Segment, Segment]", (ell, ess, ell, ell))
+    with pytest.raises(ValueError):
+        DubinsPath(PathType.LSL, two, 1.0, start)
+    with pytest.raises(ValueError):
+        DubinsPath(PathType.LSL, four, 1.0, start)
 
 
 def test_solve_all_returns_all_six() -> None:

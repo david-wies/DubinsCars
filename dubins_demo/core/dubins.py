@@ -134,8 +134,6 @@ class DubinsPath:
     def __post_init__(self) -> None:
         if not math.isfinite(self.radius) or self.radius <= 0.0:
             raise ValueError(f"turn radius must be positive, got {self.radius!r}")
-        if len(self.segments) != 3:
-            raise ValueError(f"a Dubins path has exactly three segments, got {len(self.segments)}")
         kinds = tuple(seg.kind for seg in self.segments)
         if kinds != self.path_type.kinds:
             raise ValueError(
