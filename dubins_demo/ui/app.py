@@ -47,6 +47,10 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
+        # Set by _on_listener_error when a panel raises during a refresh, so a
+        # caller (e.g. _on_load) can tell an honest failure apart from a clean
+        # update and refrain from stamping a false success over it.
+        self._refresh_failed = False
 
         self._build_menu()
         self._build_layout()
@@ -156,7 +160,12 @@ class App:
         bar flags it and a dialog carries the detail, matching how load/save
         errors are shown. Other panels are still refreshed (the model isolates
         each listener); this only reports the one that broke.
+
+        The flag lets a batched operation like :meth:`_on_load` detect the
+        failure after :meth:`Scenario.update` returns and keep this honest
+        status instead of overwriting it with a success line.
         """
+        self._refresh_failed = True
         self._set_status("A panel failed to refresh — see the error dialog.")
         messagebox.showerror("Panel refresh failed", str(exc))
 
@@ -202,7 +211,15 @@ class App:
             # The model is never touched on a failed load (FR-23-style safety).
             messagebox.showerror("Load failed", str(exc))
             return
+        # Cleared here so _on_listener_error can flag a refresh that raises
+        # during the update() below; checked afterwards to gate the success line.
+        self._refresh_failed = False
         self.model.update(**loaded.to_update_kwargs())
+        if self._refresh_failed:
+            # A panel raised while refreshing: _on_listener_error already set the
+            # honest "failed to refresh" status and opened its dialog. Leave that
+            # in place rather than falsely reporting a clean load.
+            return
         # update() has already fired _on_model_changed, which sets the
         # infeasibility notice for an unsolvable scenario. Overwriting it with a
         # bare success line would hide that the loaded file has no path, so
