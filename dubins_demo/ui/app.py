@@ -51,52 +51,16 @@ class App:
         # Tracks whether the panel-refresh failure notice is currently on the bar,
         # mirroring _no_feasible_shown, so a later clean pass knows to clear it.
         self._refresh_failed_shown = False
-        # Per-notify-pass flag: _reset_refresh_flag clears it at the START of each
-        # pass (it runs first, see below), _on_listener_error sets it when any
-        # listener raises, and _on_model_changed reads it at the END of the pass
-        # (it runs last). A True tells _on_model_changed to skip its own status
-        # write so it does not clobber the honest failure status set earlier in
-        # the same pass. Clearing up front -- rather than having the last listener
-        # read-and-clear -- means a True set late in a pass cannot leak into the
-        # next one, even when _on_model_changed is itself the listener that raises.
-        self._refresh_failed = False
-
-        # Registered before _build_layout so it runs FIRST in every notify pass,
-        # ahead of the panel listeners the panels add in their constructors: it
-        # resets _refresh_failed at the start of each pass.
-        self.model.add_listener(self._reset_refresh_flag)
 
         self._build_menu()
         self._build_layout()
 
-        # _on_model_changed is registered after the panel listeners (added in
-        # _build_layout) so it runs last in each notify pass: the flag is reset
-        # first, panels refresh, then App re-reads the model and consults the flag.
-        # Running last, it would otherwise overwrite the status set by
-        # _on_listener_error -- hence the _refresh_failed guard inside it.
-        self.model.add_listener(self._on_model_changed)
-
-        # Honest-load-status correctness depends on the listener ORDER, which
-        # nothing else enforces: _reset_refresh_flag must run first (clearing the
-        # per-pass flag) and _on_model_changed must run last (reading it). A future
-        # panel that registers a listener after _on_model_changed, or a reorder of
-        # the add_listener calls above, would silently break the failure status --
-        # and the UI is intentionally untested (spec T-5), so no test would catch
-        # it. Assert the bookends here as a cheap self-check. Reading the model's
-        # private _listeners is a deliberate internal peek: this is the one place
-        # that owns the ordering invariant, so it verifies it directly.
-        listeners = self.model._listeners
-        assert listeners and listeners[0] is self._reset_refresh_flag, (
-            "_reset_refresh_flag must be the FIRST model listener so it clears "
-            "_refresh_failed before any panel can set it; got "
-            f"{listeners[0] if listeners else None!r}"
-        )
-        assert listeners[-1] is self._on_model_changed, (
-            "_on_model_changed must be the LAST model listener so it reads "
-            "_refresh_failed after every panel has refreshed; got "
-            f"{listeners[-1]!r}"
-        )
-
+        # _on_model_changed runs LAST in every notify pass and is told whether any
+        # panel listener raised -- so it can leave an honest "panel failed" status
+        # in place instead of overwriting it. The model guarantees the final
+        # listener runs after the panel listeners (registered in _build_layout),
+        # so this needs no ordering assumption or read of model internals.
+        self.model.set_final_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
 
@@ -202,29 +166,20 @@ class App:
         errors are shown. Other panels are still refreshed (the model isolates
         each listener); this only reports the one that broke.
 
-        Sets :attr:`_refresh_failed` so :meth:`_on_model_changed` (the last
-        listener in the pass) does not overwrite this honest status with
-        "Ready."/the infeasibility notice. :meth:`Scenario.update` also returns
-        ``False``, which lets :meth:`_on_load` skip its success line.
+        :meth:`_on_model_changed` is passed ``True`` by the model when it runs
+        last in this pass, so it leaves this honest status in place instead of
+        overwriting it with "Ready."/the infeasibility notice. :meth:`_refresh_failed_shown`
+        keeps the notice honest across later passes. :meth:`Scenario.update` also
+        returns ``False``, which lets :meth:`_on_load` skip its success line.
         """
-        self._refresh_failed = True
         self._set_status(_PANEL_REFRESH_FAILED_STATUS)
         self._refresh_failed_shown = True
         messagebox.showerror("Panel refresh failed", str(exc))
 
-    def _reset_refresh_flag(self) -> None:
-        # Registered first, so this runs at the start of every notify pass and
-        # clears the per-pass failure flag before any panel listener can set it.
-        # Because clearing is owned by this first listener -- not read-and-cleared
-        # by the last one -- a True set late in a pass (even by _on_model_changed
-        # itself raising) is wiped at the next pass instead of leaking into it. A
-        # plain attribute write, it cannot raise, so the reset never fails.
-        self._refresh_failed = False
-
-    def _on_model_changed(self) -> None:
+    def _on_model_changed(self, refresh_failed: bool = False) -> None:
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
-        if self._refresh_failed:
+        if refresh_failed:
             # A panel raised earlier in this notify pass; _on_listener_error set
             # the honest failure status. Leave it in place -- overwriting it with
             # "Ready." or the infeasibility notice would defeat that report for

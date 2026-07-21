@@ -341,6 +341,73 @@ def test_update_returns_false_when_listener_raises(
     assert "RuntimeError" in capsys.readouterr().err  # failure traced, not swallowed
 
 
+def test_final_listener_runs_after_all_ordinary_listeners() -> None:
+    # The final listener is fired last in the pass, after every add_listener()
+    # callback, so a UI status pass sees the fully-refreshed model.
+    scenario = _make_scenario()
+    order: list[str] = []
+    scenario.add_listener(lambda: order.append("first"))
+    scenario.add_listener(lambda: order.append("second"))
+    scenario.set_final_listener(lambda _raised: order.append("final"))
+
+    scenario.update(goal=Config(8.0, -3.0, 0.0))
+
+    assert order == ["first", "second", "final"]
+
+
+def test_final_listener_told_false_when_no_listener_raised() -> None:
+    # A clean pass reports raised=False to the final listener.
+    scenario = _make_scenario()
+    seen: list[bool] = []
+    scenario.add_listener(lambda: None)
+    scenario.set_final_listener(seen.append)
+
+    assert scenario.update(goal=Config(8.0, -3.0, 0.0)) is True
+    assert seen == [False]
+
+
+def test_final_listener_told_true_when_ordinary_listener_raised(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # An ordinary listener raising is isolated, but the final listener is told
+    # raised=True so it can keep an honest failure status on the bar.
+    scenario = _make_scenario()
+    seen: list[bool] = []
+    scenario.add_listener(lambda: (_ for _ in ()).throw(RuntimeError("view blew up")))
+    scenario.set_final_listener(seen.append)
+
+    assert scenario.update(goal=Config(8.0, -3.0, 0.0)) is False
+    assert seen == [True]
+    assert "RuntimeError" in capsys.readouterr().err
+
+
+def test_final_listener_own_failure_is_isolated_and_reported(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The final listener is isolated like any other: its own exception is routed
+    # to stderr (no handler here), never re-raised, and flips update() to False.
+    scenario = _make_scenario()
+    scenario.set_final_listener(
+        lambda _raised: (_ for _ in ()).throw(RuntimeError("final blew up"))
+    )
+
+    assert scenario.update(goal=Config(8.0, -3.0, 0.0)) is False
+    assert "RuntimeError" in capsys.readouterr().err
+
+
+def test_set_final_listener_none_clears_previous() -> None:
+    # Passing None clears a previously registered final listener; a later call
+    # replaces it outright.
+    scenario = _make_scenario()
+    seen: list[bool] = []
+    scenario.set_final_listener(seen.append)
+    scenario.set_final_listener(None)
+
+    scenario.update(goal=Config(8.0, -3.0, 0.0))
+
+    assert seen == []
+
+
 def test_notify_raising_error_handler_does_not_propagate(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

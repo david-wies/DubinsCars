@@ -146,7 +146,8 @@ class Scenario:
     animation_speed: float              # m/s
 
     def add_listener(cb: Callable[[], None]) -> None
-    def update(**changes) -> None       # set fields, re-solve, notify once
+    def set_final_listener(cb: Callable[[bool], None] | None) -> None  # runs last; arg = any listener raised
+    def update(**changes) -> bool       # set fields, re-solve, notify once; False if a listener raised
     solutions: dict[PathType, DubinsPath | Infeasible]   # cached, refreshed by update
     highlighted: PathType | None        # selected if feasible else shortest
 ```
