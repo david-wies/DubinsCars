@@ -310,7 +310,7 @@ Self-contained (inline CSS/JS, no CDN). Structure:
 4. Table sort, row click highlights; infeasible rows grayed with reason.
 5. Circles toggle; animation plays, pauses, resets on edit; speed change works.
 6. Save → load round-trip restores scenario exactly; CSV opens in spreadsheet.
-7. Load with a panel that raises during refresh → error dialog appears **and** status bar shows "A panel failed to refresh — see the error dialog."; it must **not** show "Loaded …", "Ready.", or "No feasible Dubins path…". Verify for both a feasible and an infeasible loaded scenario.
+7. A panel that raises during refresh → error dialog appears **and** status bar shows "A panel failed to refresh — see the error dialog."; it must **not** show "Loaded …", "Ready.", or "No feasible Dubins path…". Verify on **Load** (both a feasible and an infeasible loaded scenario) **and** on a plain field edit / drag / toggle — every `model.update()` trigger, not just Load, must keep the honest status.
 8. Help opens in browser; TOC links and search work offline.
 9. Degenerate: drag goal onto start — no crash, sensible table.
 

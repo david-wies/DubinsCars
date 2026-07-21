@@ -48,16 +48,20 @@ class App:
 
         self._status_var = tk.StringVar(value="Ready.")
         self._no_feasible_shown = False
+        # Per-notify-pass flag: _on_listener_error sets it when a panel raises,
+        # _on_model_changed reads and clears it. It lets _on_model_changed skip
+        # its own status write so it does not clobber the honest failure status
+        # set earlier in the same pass. False between passes (see _on_model_changed).
+        self._refresh_failed = False
 
         self._build_menu()
         self._build_layout()
 
         # _on_model_changed is registered after the panel listeners (added in
         # _build_layout) so it runs last in each notify pass: panels refresh
-        # first, then App re-reads the model. Because it runs last it can also
-        # overwrite the status set by _on_listener_error, which is why _on_load
-        # re-asserts the honest failure status when update() reports a failed
-        # refresh.
+        # first, then App re-reads the model. Running last, it would otherwise
+        # overwrite the status set by _on_listener_error -- hence the
+        # _refresh_failed guard inside it.
         self.model.add_listener(self._on_model_changed)
         self.model.set_error_handler(self._on_listener_error)
         self._on_model_changed()
@@ -164,16 +168,27 @@ class App:
         errors are shown. Other panels are still refreshed (the model isolates
         each listener); this only reports the one that broke.
 
-        :meth:`Scenario.update` returns ``False`` when a listener raises, which
-        lets a batched operation like :meth:`_on_load` keep this honest status
-        instead of overwriting it with a success line.
+        Sets :attr:`_refresh_failed` so :meth:`_on_model_changed` (the last
+        listener in the pass) does not overwrite this honest status with
+        "Ready."/the infeasibility notice. :meth:`Scenario.update` also returns
+        ``False``, which lets :meth:`_on_load` skip its success line.
         """
+        self._refresh_failed = True
         self._set_status(_PANEL_REFRESH_FAILED_STATUS)
         messagebox.showerror("Panel refresh failed", str(exc))
 
     def _on_model_changed(self) -> None:
         has_feasible = self.model.highlighted is not None
         self._file_menu.entryconfig(_EXPORT_LABEL, state="normal" if has_feasible else "disabled")
+        if self._refresh_failed:
+            # A panel raised earlier in this notify pass; _on_listener_error set
+            # the honest failure status. Leave it in place -- overwriting it with
+            # "Ready." or the infeasibility notice would defeat that report for
+            # every update() caller that does not re-assert afterwards (the panel
+            # edits, drags, and toggles). Clear the flag for the next pass; it is
+            # always False between passes because this listener runs last.
+            self._refresh_failed = False
+            return
         if not has_feasible:
             self._set_status("No feasible Dubins path for this scenario.")
             self._no_feasible_shown = True
@@ -215,10 +230,10 @@ class App:
             return
         if not self.model.update(**loaded.to_update_kwargs()):
             # A panel raised while refreshing: _on_listener_error already showed
-            # the dialog, but _on_model_changed (the last listener) may have
-            # stamped "Ready." or the infeasibility notice over the honest status
-            # during update(). Re-assert it rather than falsely reporting a clean
-            # load.
+            # the dialog and set the honest status, which _on_model_changed left
+            # in place. Skip the success line below (it would falsely report a
+            # clean load) and re-assert the honest status defensively in case a
+            # later panel in the pass overwrote it.
             self._set_status(_PANEL_REFRESH_FAILED_STATUS)
             return
         # update() has already fired _on_model_changed, which sets the
