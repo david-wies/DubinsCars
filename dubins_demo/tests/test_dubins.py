@@ -425,11 +425,71 @@ def test_config_rejects_non_finite_theta(bad: float) -> None:
 
 
 @pytest.mark.parametrize("theta", [7.0, -1.0, 10.0 * math.pi])
-def test_config_accepts_unnormalized_theta(theta: float) -> None:
-    # theta is intentionally not normalized to [0, 2*pi); values outside that
-    # range are stored unchanged (see Config docstring / _advance).
+def test_config_normalizes_theta(theta: float) -> None:
+    # theta is normalized to [0, 2*pi) on construction, so equality means "same
+    # orientation" rather than "same number" (see Config docstring).
     cfg = Config(1.0, 2.0, theta)
-    assert cfg.theta == theta
+    assert cfg.theta == normalize(theta)
+    assert 0.0 <= cfg.theta < 2.0 * math.pi
+
+
+def test_config_equality_is_orientation() -> None:
+    # theta normalization makes headings differing by a multiple of 2*pi equal.
+    assert Config(0.0, 0.0, 0.0) == Config(0.0, 0.0, 2.0 * math.pi)
+    assert Config(1.0, 2.0, math.pi) == Config(1.0, 2.0, 3.0 * math.pi)
+
+
+def test_config_equality_is_approximate() -> None:
+    # Values within the tolerance compare equal; beyond it, unequal.
+    assert Config(0.0, 0.0, 0.0) == Config(1e-12, -1e-12, 1e-12)
+    assert Config(0.0, 0.0, 0.0) != Config(1e-3, 0.0, 0.0)
+    assert Config(0.0, 0.0, 0.0) != Config(0.0, 0.0, 1e-3)
+
+
+def test_config_equality_theta_seam() -> None:
+    # A tiny negative heading normalizes to ~2*pi but is still the same pose;
+    # circular comparison keeps the 0/2*pi seam from being a cliff.
+    assert Config(0.0, 0.0, 0.0) == Config(0.0, 0.0, -1e-12)
+
+
+@pytest.mark.parametrize(
+    ("theta_a", "theta_b"),
+    [
+        (1e-10, 2.0 * math.pi - 1e-15),  # both sides hug the seam from opposite ends
+        (2.0 * math.pi - 1e-10, 1e-15),  # same, order swapped
+        (-1e-11, 1e-11),  # straddles the seam after normalization
+        (math.pi - 1e-10, math.pi + 1e-10),  # tiny gap far from the seam
+    ],
+)
+def test_config_equality_across_seam_equal(theta_a: float, theta_b: float) -> None:
+    # Headings whose true angular separation is < eps compare equal, even when
+    # their normalized values sit on opposite sides of the 0/2*pi seam.
+    assert Config(0.0, 0.0, theta_a) == Config(0.0, 0.0, theta_b)
+
+
+@pytest.mark.parametrize(
+    ("theta_a", "theta_b"),
+    [
+        (1e-3, 2.0 * math.pi - 1e-3),  # circular gap ~2e-3, straddling the seam
+        (0.1, 2.0 * math.pi - 0.1),  # circular gap 0.2 across the seam
+        (0.0, math.pi),  # antipodal headings
+    ],
+)
+def test_config_equality_across_seam_unequal(theta_a: float, theta_b: float) -> None:
+    # A real angular separation is not masked by the wrap-around: seam-straddling
+    # headings that are genuinely apart still compare unequal.
+    assert Config(0.0, 0.0, theta_a) != Config(0.0, 0.0, theta_b)
+
+
+def test_config_not_equal_to_non_config() -> None:
+    assert Config(0.0, 0.0, 0.0) != (0.0, 0.0, 0.0)
+    assert Config(0.0, 0.0, 0.0) != "nope"
+
+
+def test_config_is_unhashable() -> None:
+    # Approximate equality has no consistent hash, so Config is unhashable.
+    with pytest.raises(TypeError):
+        hash(Config(0.0, 0.0, 0.0))
 
 
 def test_segment_rejects_negative_length() -> None:

@@ -49,14 +49,24 @@ class PathType(Enum):
         return (SegmentKind[a], SegmentKind[b], SegmentKind[c])
 
 
-@dataclass(frozen=True)
+# Absolute tolerance (meters / radians) for approximate Config equality.
+_CONFIG_EPS = 1e-9
+
+
+@dataclass(frozen=True, eq=False)
 class Config:
     """An oriented planar configuration: position (m) and heading (rad).
 
-    ``theta`` is intentionally *not* normalized to ``[0, 2*pi)``: ``_advance``
-    relies on continuous, unnormalized angle accumulation across arcs, and
-    ``sample`` normalizes headings only on output. A ``theta`` outside
-    ``[0, 2*pi)`` is therefore accepted as-is.
+    ``theta`` is normalized to ``[0, 2*pi)`` on construction. Equality is
+    *approximate* and means "same pose": two configs compare equal when their
+    positions and headings each differ by less than ``_CONFIG_EPS``, with the
+    heading compared on the circle so the ``0``/``2*pi`` seam is not a cliff.
+    This tolerant equality is deliberately inconsistent with a value hash, so
+    ``Config`` is unhashable (never used as a dict key or set member).
+
+    Normalization does not affect continuous angle accumulation across arcs --
+    ``_advance`` accumulates unnormalized headings in raw floats (never via
+    ``Config``), and ``sample`` normalizes only on output.
     """
 
     x: float
@@ -69,6 +79,19 @@ class Config:
                 f"config components must be finite, got "
                 f"x={self.x!r}, y={self.y!r}, theta={self.theta!r}"
             )
+        # Frozen dataclass: bypass the immutability guard to canonicalize theta.
+        object.__setattr__(self, "theta", normalize(self.theta))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Config):
+            return NotImplemented
+        dtheta = abs(self.theta - other.theta)
+        dtheta = min(dtheta, math.tau - dtheta)  # shortest arc across the seam
+        return (
+            abs(self.x - other.x) < _CONFIG_EPS
+            and abs(self.y - other.y) < _CONFIG_EPS
+            and dtheta < _CONFIG_EPS
+        )
 
 
 @dataclass(frozen=True)
