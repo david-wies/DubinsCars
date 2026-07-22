@@ -261,6 +261,24 @@ def test_update_rejects_ill_typed_field(field: str, bad_value: object) -> None:
         scenario.update(**{field: bad_value})
 
 
+def test_radius_policy_rejects_non_callable_min_radius() -> None:
+    # ``RadiusPolicy`` is runtime_checkable, so ``isinstance`` passes for any
+    # object merely *carrying* a ``min_radius`` attribute -- even a non-callable
+    # one. The predicate's extra ``callable(min_radius)`` check must reject such
+    # an impostor up front rather than let it fail later as a TypeError deep in
+    # ``_resolve``. ``None`` (already in _ILL_TYPED_SETTABLE) exercises only the
+    # isinstance half; this pins the callable half.
+    class _Impostor:
+        min_radius = 2.0  # a float attribute, not a method
+
+    assert isinstance(_Impostor(), RadiusPolicy)  # isinstance alone would admit it
+    with pytest.raises(TypeError, match="radius_policy"):
+        _make_scenario(radius_policy=_Impostor())
+    scenario = _make_scenario()
+    with pytest.raises(TypeError, match="radius_policy"):
+        scenario.update(radius_policy=_Impostor())
+
+
 def test_notify_isolates_failing_listener(capsys: pytest.CaptureFixture[str]) -> None:
     # A listener that raises must not strand later listeners: _notify isolates
     # each callback, so the second still fires and the model stays consistent.

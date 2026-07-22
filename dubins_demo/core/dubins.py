@@ -49,20 +49,24 @@ class PathType(Enum):
         return (SegmentKind[a], SegmentKind[b], SegmentKind[c])
 
 
-# Absolute tolerance (meters / radians) for approximate Config equality.
+# Default absolute tolerance (meters / radians) for :meth:`Config.approx`.
 _CONFIG_EPS = 1e-9
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class Config:
     """An oriented planar configuration: position (m) and heading (rad).
 
-    ``theta`` is normalized to ``[0, 2*pi)`` on construction. Equality is
-    *approximate* and means "same pose": two configs compare equal when their
-    positions and headings each differ by less than ``_CONFIG_EPS``, with the
-    heading compared on the circle so the ``0``/``2*pi`` seam is not a cliff.
-    This tolerant equality is deliberately inconsistent with a value hash, so
-    ``Config`` is unhashable (never used as a dict key or set member).
+    ``theta`` is normalized to ``[0, 2*pi)`` on construction, so two configs
+    built from headings that differ by a multiple of ``2*pi`` are identical.
+
+    ``==`` is exact structural equality (and ``Config`` is hashable): it means
+    "the same stored values", is transitive, and is safe as a dict key or set
+    member. It does *not* absorb floating-point noise -- for a tolerant
+    "same pose" test use :meth:`approx`, which compares within a tolerance and
+    treats the heading on the circle so the ``0``/``2*pi`` seam is not a cliff.
+    Tolerance lives there, opt-in, rather than in ``==`` where it would break
+    transitivity.
 
     Normalization does not affect continuous angle accumulation across arcs --
     ``_advance`` accumulates unnormalized headings in raw floats (never via
@@ -82,16 +86,16 @@ class Config:
         # Frozen dataclass: bypass the immutability guard to canonicalize theta.
         object.__setattr__(self, "theta", normalize(self.theta))
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Config):
-            return NotImplemented
+    def approx(self, other: Config, *, tol: float = _CONFIG_EPS) -> bool:
+        """Return whether *other* is the same pose within *tol*.
+
+        Positions and headings must each differ by less than *tol*; the heading
+        is compared as the shortest arc on the circle, so headings straddling
+        the ``0``/``2*pi`` seam are not spuriously far apart.
+        """
         dtheta = abs(self.theta - other.theta)
         dtheta = min(dtheta, math.tau - dtheta)  # shortest arc across the seam
-        return (
-            abs(self.x - other.x) < _CONFIG_EPS
-            and abs(self.y - other.y) < _CONFIG_EPS
-            and dtheta < _CONFIG_EPS
-        )
+        return abs(self.x - other.x) < tol and abs(self.y - other.y) < tol and dtheta < tol
 
 
 @dataclass(frozen=True)

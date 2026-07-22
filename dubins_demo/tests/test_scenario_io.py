@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from pathlib import Path
 
@@ -76,6 +77,30 @@ def test_json_round_trip_restores_all_fields(tmp_path: Path) -> None:
 
     assert loaded.heading_convention is Convention.AZIMUTH
     assert loaded.angle_unit is Unit.RAD
+
+
+def test_round_trip_persists_normalized_theta(tmp_path: Path) -> None:
+    # Config normalizes theta to [0, 2*pi) on construction, so what is saved --
+    # and hence what round-trips -- is the normalized heading, not the raw input.
+    # A scenario built from an out-of-range theta must therefore save the
+    # normalized value and reload identically (idempotent under a second solve).
+    raw = 7.0  # 7.0 rad wraps to 7.0 - 2*pi ~= 0.7168
+    scenario = Scenario(
+        start=Config(0.0, 0.0, raw),
+        goal=Config(10.0, 5.0, 0.0),
+        radius_policy=FixedRadius(2.0),
+    )
+    assert scenario.start.theta == pytest.approx(raw - 2.0 * math.pi)
+
+    target = tmp_path / "scenario.json"
+    save_scenario(scenario, target)
+
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert data["start"]["theta"] == pytest.approx(raw - 2.0 * math.pi)
+
+    loaded = load_scenario(target)
+    assert loaded.start.theta == pytest.approx(scenario.start.theta, abs=1e-12)
+    assert 0.0 <= loaded.start.theta < 2.0 * math.pi
 
 
 def test_saved_file_matches_ext4_schema(tmp_path: Path) -> None:
