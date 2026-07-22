@@ -89,8 +89,9 @@ class Config:
     def approx(self, other: Config, *, tol: float = _CONFIG_EPS) -> bool:
         """Return whether *other* is the same pose within *tol*.
 
-        Positions and headings must each differ by less than *tol*; the heading
-        is compared as the shortest arc on the circle, so headings straddling
+        Positions and headings must each differ by strictly less than *tol*
+        (a difference of exactly *tol* is not approx-equal); the heading is
+        compared as the shortest arc on the circle, so headings straddling
         the ``0``/``2*pi`` seam are not spuriously far apart.
         """
         dtheta = abs(self.theta - other.theta)

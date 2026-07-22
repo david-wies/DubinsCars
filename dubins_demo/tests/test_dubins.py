@@ -444,9 +444,10 @@ def test_config_equality_is_exact() -> None:
 
 
 def test_config_equality_is_transitive() -> None:
-    # The tolerant __eq__ this replaced was intransitive: within an absolute-eps
-    # band a == b and b == c yet a != c, because a and c sit just over eps apart.
-    # Exact == cannot: that same triple is pairwise unequal, no chained surprise.
+    # An absolute-eps tolerant __eq__ would be intransitive: a within eps of b,
+    # and b within eps of c, yet a and c sit just over eps apart (using
+    # _CONFIG_EPS-scale gaps below). Exact == cannot: that same triple is
+    # pairwise unequal, no chained surprise.
     a = Config(0.0, 0.0, 0.0)
     b = Config(0.6e-9, 0.0, 0.0)
     c = Config(1.2e-9, 0.0, 0.0)
@@ -485,6 +486,22 @@ def test_config_approx_custom_tolerance() -> None:
     assert a.approx(b, tol=1e-2)  # a looser tolerance accepts it
 
 
+def test_config_approx_is_symmetric() -> None:
+    # approx compares two poses, so swapping the operands must not change
+    # the result, both within and beyond the tolerance band.
+    a, b = Config(0.0, 0.0, 0.0), Config(1e-12, -1e-12, 1e-12)
+    assert a.approx(b) == b.approx(a)
+    c, d = Config(0.0, 0.0, 0.0), Config(1e-3, 0.0, 0.0)
+    assert c.approx(d) == d.approx(c)
+
+
+def test_config_approx_boundary_at_exact_tolerance() -> None:
+    # tol is a strict (exclusive) bound: a gap of exactly tol is not approx.
+    a = Config(0.0, 0.0, 0.0)
+    assert not a.approx(Config(1e-6, 0.0, 0.0), tol=1e-6)
+    assert not a.approx(Config(0.0, 0.0, 1e-6), tol=1e-6)
+
+
 def test_config_approx_theta_seam() -> None:
     # A tiny negative heading normalizes to ~2*pi but is still the same pose;
     # circular comparison keeps the 0/2*pi seam from being a cliff.
@@ -501,8 +518,9 @@ def test_config_approx_theta_seam() -> None:
     ],
 )
 def test_config_approx_across_seam_equal(theta_a: float, theta_b: float) -> None:
-    # Headings whose true angular separation is < eps are the same pose, even
-    # when their normalized values sit on opposite sides of the 0/2*pi seam.
+    # Headings whose true angular separation is < eps are the same pose,
+    # including cases where their normalized values sit on opposite sides of
+    # the 0/2*pi seam.
     assert Config(0.0, 0.0, theta_a).approx(Config(0.0, 0.0, theta_b))
 
 

@@ -87,7 +87,7 @@ _SETTABLE_TYPES: dict[str, tuple[Callable[[object], bool], str]] = {
     "goal": (lambda v: isinstance(v, Config), "a Config"),
     "radius_policy": (
         lambda v: isinstance(v, RadiusPolicy) and callable(getattr(v, "min_radius", None)),
-        "a RadiusPolicy",
+        "a RadiusPolicy with a callable min_radius",
     ),
     "heading_convention": (lambda v: isinstance(v, Convention), "a Convention"),
     "angle_unit": (lambda v: isinstance(v, Unit), "a Unit"),
