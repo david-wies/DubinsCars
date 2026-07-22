@@ -444,11 +444,18 @@ def test_config_equality_is_exact() -> None:
 
 
 def test_config_equality_is_transitive() -> None:
-    # Exact == cannot exhibit the a==b, b==c, a!=c failure of tolerant equality.
+    # The tolerant __eq__ this replaced was intransitive: within an absolute-eps
+    # band a == b and b == c yet a != c, because a and c sit just over eps apart.
+    # Exact == cannot: that same triple is pairwise unequal, no chained surprise.
     a = Config(0.0, 0.0, 0.0)
     b = Config(0.6e-9, 0.0, 0.0)
     c = Config(1.2e-9, 0.0, 0.0)
-    assert not (a == b and b == c and a != c)
+    assert a != b and b != c and a != c
+    # And equality genuinely chains: equal poses stay equal transitively.
+    d = Config(1.0, 2.0, 0.0)
+    e = Config(1.0, 2.0, 2.0 * math.pi)
+    f = Config(1.0, 2.0, 4.0 * math.pi)
+    assert d == e and e == f and d == f
 
 
 def test_config_not_equal_to_non_config() -> None:
