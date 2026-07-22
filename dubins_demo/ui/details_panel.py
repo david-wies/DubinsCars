@@ -164,10 +164,11 @@ class DetailsPanel:
             # _render(), so the lookup always succeeds. Guarded defensively so a
             # stray selection can never raise out of the Tk callback.
             return
-        # Selecting is meaningful only for feasible words: an infeasible row has
-        # no path to highlight, and retaining it as selected_type would silently
-        # auto-highlight later if an edit makes that word feasible. Ignore it.
-        if not isinstance(self.model.solutions.get(path_type), DubinsPath):
+        # Selecting is meaningful only for feasible words. Infeasible rows carry
+        # the "infeasible" tag set in _render(); ignore clicks on them. Such a
+        # row has no path to highlight, and retaining it as selected_type would
+        # silently auto-highlight later if an edit makes that word feasible.
+        if self._tree.tag_has("infeasible", selection[0]):
             return
         # Tk delivers <<TreeviewSelect>> asynchronously, so the selection_set()
         # in _render() echoes back here after _refreshing has cleared. Bail when
