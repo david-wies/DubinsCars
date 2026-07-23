@@ -126,11 +126,9 @@ class Scenario:
     #: so the two never drift (adding a field to the type map is enough). The
     #: derived caches (``solutions``, ``highlighted``) are deliberately absent --
     #: they are recomputed, never set. ``animation_speed`` is also deliberately
-    #: absent: it is pure playback state with its own non-notifying setter
-    #: :meth:`set_animation_speed`, so routing it through ``update`` (a re-solve
-    #: and the FR-15 animation teardown) is exactly what we avoid. Membership
-    #: only; iteration order is irrelevant (``update`` iterates the caller's
-    #: ``changes``, not this set).
+    #: absent -- see the class docstring above and :meth:`set_animation_speed`
+    #: for why. Membership only; iteration order is irrelevant (``update``
+    #: iterates the caller's ``changes``, not this set).
     _SETTABLE: frozenset[str] = frozenset(_SETTABLE_TYPES)
 
     def __init__(

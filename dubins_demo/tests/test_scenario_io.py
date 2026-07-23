@@ -64,12 +64,11 @@ def test_json_round_trip_restores_all_fields(tmp_path: Path) -> None:
     save_scenario(scenario, target)
     loaded = load_scenario(target)
 
-    assert loaded.start.x == scenario.start.x
-    assert loaded.start.y == scenario.start.y
-    assert loaded.start.theta == pytest.approx(scenario.start.theta, abs=1e-12)
-    assert loaded.goal.x == scenario.goal.x
-    assert loaded.goal.y == scenario.goal.y
-    assert loaded.goal.theta == pytest.approx(scenario.goal.theta, abs=1e-12)
+    # JSON round-trips a float exactly (json's encoder emits the shortest
+    # repr that reparses to the identical float64), so these must be exact,
+    # not merely approx -- a tolerant check here would mask float drift.
+    assert loaded.start == scenario.start
+    assert loaded.goal == scenario.goal
 
     assert isinstance(loaded.radius_policy, FixedRadius)
     assert loaded.radius_policy.value == pytest.approx(2.0, abs=1e-12)
@@ -99,7 +98,10 @@ def test_round_trip_persists_normalized_theta(tmp_path: Path) -> None:
     assert data["start"]["theta"] == pytest.approx(raw - 2.0 * math.pi)
 
     loaded = load_scenario(target)
-    assert loaded.start.theta == pytest.approx(scenario.start.theta, abs=1e-12)
+    # Exact, not approx: JSON round-trips the float64 bits exactly (see the
+    # comment above the previous test), so a regression that reintroduces
+    # drift in the save/load path must fail this assertion.
+    assert loaded.start.theta == scenario.start.theta
     assert 0.0 <= loaded.start.theta < 2.0 * math.pi
 
 

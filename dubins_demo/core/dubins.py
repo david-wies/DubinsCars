@@ -69,8 +69,7 @@ class Config:
     transitivity.
 
     Normalization does not affect continuous angle accumulation across arcs --
-    ``_advance`` accumulates unnormalized headings in raw floats (never via
-    ``Config``), and ``sample`` normalizes only on output.
+    see :func:`_advance`, which never constructs a ``Config``.
     """
 
     x: float

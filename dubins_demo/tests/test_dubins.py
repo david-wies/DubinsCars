@@ -433,6 +433,21 @@ def test_config_normalizes_theta(theta: float) -> None:
     assert 0.0 <= cfg.theta < 2.0 * math.pi
 
 
+@pytest.mark.parametrize(
+    ("theta", "expected"),
+    [
+        (-1e-17, normalize(-1e-17)),
+        (2.0 * math.pi, 0.0),
+    ],
+)
+def test_config_normalizes_theta_at_seam(theta: float, expected: float) -> None:
+    # Boundary/seam values at the 0/2*pi wraparound, checked through Config
+    # construction itself (not just the bare normalize() helper).
+    cfg = Config(0.0, 0.0, theta)
+    assert cfg.theta == expected
+    assert 0.0 <= cfg.theta < 2.0 * math.pi
+
+
 def test_config_equality_is_exact() -> None:
     # == is exact structural equality: theta normalization makes headings that
     # differ by a multiple of 2*pi identical, but nothing else is absorbed.
