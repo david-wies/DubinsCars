@@ -232,11 +232,18 @@ class DubinsPath:
 
 
 # --- Closed-form word solvers in the canonical frame ------------------------
-# Each returns (t, p, q) normalized segment parameters at unit radius, or None
-# with a reason if the word is infeasible for the given (alpha, beta, d).
+# Each returns (t, p, q) at unit radius, or bare None if the word is
+# infeasible for the given (alpha, beta, d); the human-readable reason is
+# attached separately in _solve_one from the _SOLVERS table below, not
+# carried by the return value. t and q are normalized to [0, 2*pi); for the
+# CSC words (LSL/RSR/LSR/RSL) p is an unbounded straight-segment length
+# (p = sqrt(p_sq)), not a normalized angle -- only the CCC words (RLR/LRL)
+# use p as a normalized middle-arc angle. LSL/RSR are always feasible and
+# never return None (see the p_sq comments in _lsl/_rsr below); only
+# LSR/RSL/RLR/LRL can.
 
 
-def _lsl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | None:
+def _lsl(alpha: float, beta: float, d: float) -> tuple[float, float, float]:
     tmp0 = d + math.sin(alpha) - math.sin(beta)
     # p_sq is algebraically (d + sin a - sin b)^2 + (cos b - cos a)^2, a sum of
     # squares, so the outer tangent always exists (LSL is feasible for every
@@ -251,7 +258,7 @@ def _lsl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     return t, p, q
 
 
-def _rsr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | None:
+def _rsr(alpha: float, beta: float, d: float) -> tuple[float, float, float]:
     tmp0 = d - math.sin(alpha) + math.sin(beta)
     # See _lsl: p_sq is a sum of squares, so RSR is always feasible; clamp a
     # rounding-induced tiny negative to 0 instead of returning None.
@@ -291,7 +298,7 @@ def _rlr(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (math.sin(alpha) - math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))  # CCC middle arc angle in [0, 2*pi)
+    p = normalize(-math.acos(tmp))  # CCC middle arc angle, a major arc in [pi, 2*pi)
     t = normalize(
         alpha
         - math.atan2(math.cos(alpha) - math.cos(beta), d - math.sin(alpha) + math.sin(beta))
@@ -305,7 +312,7 @@ def _lrl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
     tmp = (6 - d * d + 2 * math.cos(alpha - beta) + 2 * d * (-math.sin(alpha) + math.sin(beta))) / 8
     if abs(tmp) > 1:
         return None
-    p = normalize(-math.acos(tmp))  # CCC middle arc angle in [0, 2*pi)
+    p = normalize(-math.acos(tmp))  # CCC middle arc angle, a major arc in [pi, 2*pi)
     t = normalize(
         -alpha
         + math.atan2(-math.cos(alpha) + math.cos(beta), d + math.sin(alpha) - math.sin(beta))
@@ -316,6 +323,9 @@ def _lrl(alpha: float, beta: float, d: float) -> tuple[float, float, float] | No
 
 
 _SOLVERS = {
+    # LSL/RSR solvers never return None (see the block comment above the
+    # solvers), so these two reason strings are unreachable dead data --
+    # kept only for tuple-shape symmetry with the other four entries.
     PathType.LSL: (_lsl, "outer tangent does not exist"),
     PathType.RSR: (_rsr, "outer tangent does not exist"),
     PathType.LSR: (_lsr, "inner tangent does not exist (turning circles overlap)"),
