@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from pathlib import Path
 
@@ -63,12 +64,11 @@ def test_json_round_trip_restores_all_fields(tmp_path: Path) -> None:
     save_scenario(scenario, target)
     loaded = load_scenario(target)
 
-    assert loaded.start.x == scenario.start.x
-    assert loaded.start.y == scenario.start.y
-    assert loaded.start.theta == pytest.approx(scenario.start.theta, abs=1e-12)
-    assert loaded.goal.x == scenario.goal.x
-    assert loaded.goal.y == scenario.goal.y
-    assert loaded.goal.theta == pytest.approx(scenario.goal.theta, abs=1e-12)
+    # JSON round-trips a float exactly (json's encoder emits the shortest
+    # repr that reparses to the identical float64), so these must be exact,
+    # not merely approx -- a tolerant check here would mask float drift.
+    assert loaded.start == scenario.start
+    assert loaded.goal == scenario.goal
 
     assert isinstance(loaded.radius_policy, FixedRadius)
     assert loaded.radius_policy.value == pytest.approx(2.0, abs=1e-12)
@@ -76,6 +76,46 @@ def test_json_round_trip_restores_all_fields(tmp_path: Path) -> None:
 
     assert loaded.heading_convention is Convention.AZIMUTH
     assert loaded.angle_unit is Unit.RAD
+
+
+@pytest.mark.parametrize(
+    ("raw", "wraps"),
+    [
+        (7.0, -1),  # 7.0 rad wraps down to 7.0 - 2*pi ~= 0.7168 (positive overflow)
+        (-1.0, 1),  # -1.0 rad wraps up to -1.0 + 2*pi ~= 5.2832 (negative underflow)
+    ],
+    ids=["positive_overflow", "negative_underflow"],
+)
+def test_round_trip_persists_normalized_theta(tmp_path: Path, raw: float, wraps: int) -> None:
+    # Config normalizes theta to [0, 2*pi) on construction, so what is saved --
+    # and hence what round-trips -- is the normalized heading, not the raw input.
+    # A scenario built from an out-of-range theta must therefore save the
+    # normalized value and reload identically (idempotent under a second solve).
+    # Both directions of overflow are covered here: a positive raw that wraps
+    # down and a negative raw that wraps up. ``_config_from_dict`` rebuilds
+    # ``Config`` straight from raw JSON floats and leans on ``__post_init__``
+    # normalization for both, so a sign-specific regression in that path would
+    # only show up on one of the two parametrizations.
+    expected = raw + wraps * 2.0 * math.pi
+    scenario = Scenario(
+        start=Config(0.0, 0.0, raw),
+        goal=Config(10.0, 5.0, 0.0),
+        radius_policy=FixedRadius(2.0),
+    )
+    assert scenario.start.theta == pytest.approx(expected)
+
+    target = tmp_path / "scenario.json"
+    save_scenario(scenario, target)
+
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert data["start"]["theta"] == pytest.approx(expected)
+
+    loaded = load_scenario(target)
+    # Exact, not approx: JSON round-trips the float64 bits exactly (see the
+    # comment above the previous test), so a regression that reintroduces
+    # drift in the save/load path must fail this assertion.
+    assert loaded.start.theta == scenario.start.theta
+    assert 0.0 <= loaded.start.theta < 2.0 * math.pi
 
 
 def test_saved_file_matches_ext4_schema(tmp_path: Path) -> None:

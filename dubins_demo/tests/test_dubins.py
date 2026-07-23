@@ -425,11 +425,188 @@ def test_config_rejects_non_finite_theta(bad: float) -> None:
 
 
 @pytest.mark.parametrize("theta", [7.0, -1.0, 10.0 * math.pi])
-def test_config_accepts_unnormalized_theta(theta: float) -> None:
-    # theta is intentionally not normalized to [0, 2*pi); values outside that
-    # range are stored unchanged (see Config docstring / _advance).
+def test_config_normalizes_theta(theta: float) -> None:
+    # theta is normalized to [0, 2*pi) on construction, so headings that differ
+    # by a multiple of 2*pi collapse to the same value (see Config docstring).
     cfg = Config(1.0, 2.0, theta)
-    assert cfg.theta == theta
+    assert cfg.theta == normalize(theta)
+    assert 0.0 <= cfg.theta < 2.0 * math.pi
+
+
+@pytest.mark.parametrize(
+    ("theta", "expected"),
+    [
+        (-1e-17, normalize(-1e-17)),
+        (2.0 * math.pi, 0.0),
+    ],
+)
+def test_config_normalizes_theta_at_seam(theta: float, expected: float) -> None:
+    # Boundary/seam values at the 0/2*pi wraparound, checked through Config
+    # construction itself (not just the bare normalize() helper).
+    cfg = Config(0.0, 0.0, theta)
+    assert cfg.theta == expected
+    assert 0.0 <= cfg.theta < 2.0 * math.pi
+
+
+def test_config_equality_is_exact() -> None:
+    # == is exact structural equality: theta normalization makes headings that
+    # differ by a multiple of 2*pi identical, but nothing else is absorbed.
+    assert Config(0.0, 0.0, 0.0) == Config(0.0, 0.0, 2.0 * math.pi)
+    assert Config(1.0, 2.0, math.pi) == Config(1.0, 2.0, 3.0 * math.pi)
+    # Sub-tolerance differences are NOT equal under == (that is approx's job).
+    assert Config(0.0, 0.0, 0.0) != Config(1e-12, -1e-12, 1e-12)
+    assert Config(0.0, 0.0, 0.0) != Config(1e-3, 0.0, 0.0)
+
+
+def test_config_equality_x_only_difference() -> None:
+    # x and y have no normalization logic (unlike theta), but == must still
+    # tell x-only differences apart -- and treat an identical x as equal.
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.5, 2.0, 0.5)
+
+
+def test_config_equality_y_only_difference() -> None:
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.0, 2.5, 0.5)
+
+
+def test_config_equality_theta_only_difference() -> None:
+    # Every other theta-inequality case above also varies x or y, or differs
+    # by an exact 2*pi multiple (which is actually equal) -- this is the only
+    # test proving theta alone participates in == (and, transitively, hash).
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.0, 2.0, 0.6)
+
+
+def test_config_equality_is_transitive() -> None:
+    # An absolute-eps tolerant __eq__ would be intransitive: a within eps of b,
+    # and b within eps of c, yet a and c sit just over eps apart (using
+    # _CONFIG_EPS-scale gaps below). Exact == cannot: that same triple is
+    # pairwise unequal, no chained surprise.
+    a = Config(0.0, 0.0, 0.0)
+    b = Config(0.6e-9, 0.0, 0.0)
+    c = Config(1.2e-9, 0.0, 0.0)
+    assert a != b and b != c and a != c
+    # And equality genuinely chains: equal poses stay equal transitively.
+    d = Config(1.0, 2.0, 0.0)
+    e = Config(1.0, 2.0, 2.0 * math.pi)
+    f = Config(1.0, 2.0, 4.0 * math.pi)
+    assert d == e and e == f and d == f
+
+
+def test_config_not_equal_to_non_config() -> None:
+    assert Config(0.0, 0.0, 0.0) != (0.0, 0.0, 0.0)
+    assert Config(0.0, 0.0, 0.0) != "nope"
+
+
+def test_config_is_hashable() -> None:
+    # Exact == is consistent with a value hash, so Config works as a set/dict key.
+    assert hash(Config(1.0, 2.0, 3.0)) == hash(Config(1.0, 2.0, 3.0))
+    # Equal configs (same pose modulo 2*pi) share a hash and collapse in a set.
+    assert hash(Config(0.0, 0.0, 0.0)) == hash(Config(0.0, 0.0, 2.0 * math.pi))
+    assert len({Config(0.0, 0.0, 0.0), Config(0.0, 0.0, 2.0 * math.pi)}) == 1
+
+
+def test_config_approx_is_approximate() -> None:
+    # Values within the tolerance are the same pose; beyond it, they are not.
+    assert Config(0.0, 0.0, 0.0).approx(Config(1e-12, -1e-12, 1e-12))
+    assert not Config(0.0, 0.0, 0.0).approx(Config(1e-3, 0.0, 0.0))
+    assert not Config(0.0, 0.0, 0.0).approx(Config(0.0, 0.0, 1e-3))
+
+
+def test_config_approx_custom_tolerance() -> None:
+    # tol widens or tightens the "same pose" band.
+    a, b = Config(0.0, 0.0, 0.0), Config(1e-3, 0.0, 0.0)
+    assert not a.approx(b)  # default eps rejects a 1e-3 gap
+    assert a.approx(b, tol=1e-2)  # a looser tolerance accepts it
+
+
+def test_config_approx_is_symmetric() -> None:
+    # approx compares two poses, so swapping the operands must not change
+    # the result, both within and beyond the tolerance band.
+    a, b = Config(0.0, 0.0, 0.0), Config(1e-12, -1e-12, 1e-12)
+    assert a.approx(b) == b.approx(a)
+    c, d = Config(0.0, 0.0, 0.0), Config(1e-3, 0.0, 0.0)
+    assert c.approx(d) == d.approx(c)
+
+
+def test_config_approx_boundary_at_exact_tolerance() -> None:
+    # tol is a strict (exclusive) bound: a gap of exactly tol is not approx.
+    a = Config(0.0, 0.0, 0.0)
+    assert not a.approx(Config(1e-6, 0.0, 0.0), tol=1e-6)
+    assert not a.approx(Config(0.0, 1e-6, 0.0), tol=1e-6)
+    assert not a.approx(Config(0.0, 0.0, 1e-6), tol=1e-6)
+
+
+def test_config_approx_rejects_non_positive_tolerance() -> None:
+    # Mirrors the construction-time finiteness guard: a non-positive tol
+    # would silently produce meaningless always-false/always-true
+    # comparisons rather than fail loudly, so it must raise instead.
+    a, b = Config(0.0, 0.0, 0.0), Config(0.0, 0.0, 0.0)
+    with pytest.raises(ValueError, match="tol"):
+        a.approx(b, tol=0)
+    with pytest.raises(ValueError, match="tol"):
+        a.approx(b, tol=-1e-6)
+
+
+def test_config_approx_x_only_difference() -> None:
+    # y and theta held fixed: isolates x so a passing test genuinely proves
+    # x participates in approx, not just the combined distance in test_config_
+    # approx_is_approximate.
+    a = Config(0.0, 1.0, 0.5)
+    assert a.approx(Config(1e-12, 1.0, 0.5))
+    assert not a.approx(Config(1e-3, 1.0, 0.5))
+
+
+def test_config_approx_y_only_difference() -> None:
+    a = Config(1.0, 0.0, 0.5)
+    assert a.approx(Config(1.0, 1e-12, 0.5))
+    assert not a.approx(Config(1.0, 1e-3, 0.5))
+
+
+def test_config_approx_theta_only_difference() -> None:
+    # An ordinary theta away from the 0/2*pi seam, so this proves per-axis
+    # isolation rather than the seam-wraparound behavior already covered by
+    # test_config_approx_theta_seam and the seam-parametrized tests below.
+    a = Config(1.0, 2.0, math.pi)
+    assert a.approx(Config(1.0, 2.0, math.pi + 1e-12))
+    assert not a.approx(Config(1.0, 2.0, math.pi + 1e-3))
+
+
+def test_config_approx_theta_seam() -> None:
+    # A tiny negative heading normalizes to ~2*pi but is still the same pose;
+    # circular comparison keeps the 0/2*pi seam from being a cliff.
+    assert Config(0.0, 0.0, 0.0).approx(Config(0.0, 0.0, -1e-12))
+
+
+@pytest.mark.parametrize(
+    ("theta_a", "theta_b"),
+    [
+        (1e-10, 2.0 * math.pi - 1e-15),  # both sides hug the seam from opposite ends
+        (2.0 * math.pi - 1e-10, 1e-15),  # same, order swapped
+        (-1e-11, 1e-11),  # straddles the seam after normalization
+        (math.pi - 1e-10, math.pi + 1e-10),  # tiny gap far from the seam
+    ],
+)
+def test_config_approx_across_seam_equal(theta_a: float, theta_b: float) -> None:
+    # Headings whose true angular separation is < eps are the same pose,
+    # including cases where their normalized values sit on opposite sides of
+    # the 0/2*pi seam.
+    assert Config(0.0, 0.0, theta_a).approx(Config(0.0, 0.0, theta_b))
+
+
+@pytest.mark.parametrize(
+    ("theta_a", "theta_b"),
+    [
+        (1e-3, 2.0 * math.pi - 1e-3),  # circular gap ~2e-3, straddling the seam
+        (0.1, 2.0 * math.pi - 0.1),  # circular gap 0.2 across the seam
+        (0.0, math.pi),  # antipodal headings
+    ],
+)
+def test_config_approx_across_seam_unequal(theta_a: float, theta_b: float) -> None:
+    # A real angular separation is not masked by the wrap-around: seam-straddling
+    # headings that are genuinely apart are not the same pose.
+    assert not Config(0.0, 0.0, theta_a).approx(Config(0.0, 0.0, theta_b))
 
 
 def test_segment_rejects_negative_length() -> None:

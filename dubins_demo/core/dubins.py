@@ -49,14 +49,30 @@ class PathType(Enum):
         return (SegmentKind[a], SegmentKind[b], SegmentKind[c])
 
 
+# Default absolute tolerance (meters / radians) for :meth:`Config.approx`.
+_CONFIG_EPS = 1e-9
+
+
 @dataclass(frozen=True)
 class Config:
     """An oriented planar configuration: position (m) and heading (rad).
 
-    ``theta`` is intentionally *not* normalized to ``[0, 2*pi)``: ``_advance``
-    relies on continuous, unnormalized angle accumulation across arcs, and
-    ``sample`` normalizes headings only on output. A ``theta`` outside
-    ``[0, 2*pi)`` is therefore accepted as-is.
+    ``theta`` is normalized to ``[0, 2*pi)`` on construction, so two configs
+    built from headings that differ by a multiple of ``2*pi`` are identical.
+
+    ``==`` is exact structural equality (and ``Config`` is hashable): it means
+    "the same stored values", is transitive, and is safe as a dict key or set
+    member. It does *not* absorb floating-point noise -- for a tolerant
+    "same pose" test use :meth:`approx`, which compares within a tolerance and
+    treats the heading on the circle so the ``0``/``2*pi`` seam is not a cliff.
+    Tolerance lives there, opt-in, rather than in ``==`` where it would break
+    transitivity.
+
+    Normalization does not affect continuous angle accumulation across arcs --
+    see :func:`_advance`, which never constructs a ``Config``.
+
+    Equality/hashing rely on ``theta`` staying strictly below ``2*pi`` after
+    normalization; see the edge-case guard in :func:`angles.normalize`.
     """
 
     x: float
@@ -69,6 +85,28 @@ class Config:
                 f"config components must be finite, got "
                 f"x={self.x!r}, y={self.y!r}, theta={self.theta!r}"
             )
+        # Frozen dataclass: bypass the immutability guard to canonicalize theta.
+        object.__setattr__(self, "theta", normalize(self.theta))
+
+    def approx(self, other: Config, *, tol: float = _CONFIG_EPS) -> bool:
+        """Return whether *other* is the same pose within *tol*.
+
+        Positions and headings must each differ by strictly less than *tol*
+        (a difference of exactly *tol* is not approx-equal); the heading is
+        compared as the shortest arc on the circle, so headings straddling
+        the ``0``/``2*pi`` seam are not spuriously far apart. *tol* applies
+        uniformly to both position (meters) and heading (radians) -- a value
+        meaningful for one is not automatically meaningful for the other.
+
+        Not transitive: ``a.approx(b)`` and ``b.approx(c)`` do not imply
+        ``a.approx(c)``. Do not chain calls to build equivalence classes
+        (e.g. deduplicating a list of near-identical poses).
+        """
+        if tol <= 0:
+            raise ValueError(f"tol must be positive, got tol={tol!r}")
+        dtheta = abs(self.theta - other.theta)
+        dtheta = min(dtheta, math.tau - dtheta)  # shortest arc across the seam
+        return abs(self.x - other.x) < tol and abs(self.y - other.y) < tol and dtheta < tol
 
 
 @dataclass(frozen=True)

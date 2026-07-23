@@ -77,12 +77,18 @@ def _validate_animation_speed(value: float) -> float:
 
 #: Per-field type predicates for :func:`_validate_settable`, keyed by the same
 #: names as :attr:`Scenario._SETTABLE`. Each maps to ``(predicate, expected)``.
-#: ``RadiusPolicy`` is ``runtime_checkable``, so ``isinstance`` verifies the
-#: ``min_radius`` protocol; ``selected_type`` also admits ``None``.
+#: ``RadiusPolicy`` is ``runtime_checkable``, so ``isinstance`` only confirms a
+#: ``min_radius`` attribute *exists* -- not that it is callable -- so the
+#: predicate additionally requires ``callable(min_radius)`` to reject an object
+#: that would otherwise fail later as a ``TypeError`` in ``_resolve``.
+#: ``selected_type`` also admits ``None``.
 _SETTABLE_TYPES: dict[str, tuple[Callable[[object], bool], str]] = {
     "start": (lambda v: isinstance(v, Config), "a Config"),
     "goal": (lambda v: isinstance(v, Config), "a Config"),
-    "radius_policy": (lambda v: isinstance(v, RadiusPolicy), "a RadiusPolicy"),
+    "radius_policy": (
+        lambda v: isinstance(v, RadiusPolicy) and callable(getattr(v, "min_radius", None)),
+        "a RadiusPolicy with a callable min_radius",
+    ),
     "heading_convention": (lambda v: isinstance(v, Convention), "a Convention"),
     "angle_unit": (lambda v: isinstance(v, Unit), "a Unit"),
     "selected_type": (lambda v: v is None or isinstance(v, PathType), "a PathType or None"),
@@ -106,17 +112,23 @@ class Scenario:
     """Observable scenario state with cached Dubins solutions.
 
     All input/display state is held in private fields exposed through read-only
-    :func:`property` accessors. :meth:`update` is the *sole* mutator: it is the
-    only way to change a field, and it always re-solves and notifies, so the
-    cached ``solutions`` / ``highlighted`` can never go stale behind the views'
-    backs.
+    :func:`property` accessors. :meth:`update` is the sole mutator of
+    geometry/display state: it is the only way to change a settable field, and
+    it always re-solves and notifies, so the cached ``solutions`` /
+    ``highlighted`` can never go stale behind the views' backs. The one
+    deliberate exception is :meth:`set_animation_speed`, a second mutation path
+    kept separate on purpose: it writes only the playback speed and neither
+    re-solves nor notifies, so editing it cannot trigger the FR-15 animation
+    teardown (see that method's docstring).
     """
 
     #: Fields that :meth:`update` may set, derived from :data:`_SETTABLE_TYPES`
     #: so the two never drift (adding a field to the type map is enough). The
     #: derived caches (``solutions``, ``highlighted``) are deliberately absent --
-    #: they are recomputed, never set. Membership only; iteration order is
-    #: irrelevant (``update`` iterates the caller's ``changes``, not this set).
+    #: they are recomputed, never set. ``animation_speed`` is also deliberately
+    #: absent -- see the class docstring above and :meth:`set_animation_speed`
+    #: for why. Membership only; iteration order is irrelevant (``update``
+    #: iterates the caller's ``changes``, not this set).
     _SETTABLE: frozenset[str] = frozenset(_SETTABLE_TYPES)
 
     def __init__(
@@ -207,9 +219,10 @@ class Scenario:
         """The cached per-word solver results (recomputed by :meth:`update`).
 
         Returned as a read-only view so callers cannot mutate the cache and
-        corrupt model state; :meth:`update` replaces it wholesale on each solve.
-        The view's identity is stable between solves, so ``is`` comparisons
-        still detect whether a re-solve has happened.
+        corrupt model state. A *fresh* view object is returned on every solve
+        (``_resolve`` builds a new ``MappingProxyType``), so an ``is`` check
+        against a previously held reference detects that a re-solve has
+        happened; the returned identity is stable only until the next solve.
         """
         return self._solutions_view
 
