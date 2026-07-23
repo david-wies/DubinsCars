@@ -458,6 +458,18 @@ def test_config_equality_is_exact() -> None:
     assert Config(0.0, 0.0, 0.0) != Config(1e-3, 0.0, 0.0)
 
 
+def test_config_equality_x_only_difference() -> None:
+    # x and y have no normalization logic (unlike theta), but == must still
+    # tell x-only differences apart -- and treat an identical x as equal.
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.5, 2.0, 0.5)
+
+
+def test_config_equality_y_only_difference() -> None:
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.0, 2.5, 0.5)
+
+
 def test_config_equality_is_transitive() -> None:
     # An absolute-eps tolerant __eq__ would be intransitive: a within eps of b,
     # and b within eps of c, yet a and c sit just over eps apart (using
