@@ -70,6 +70,9 @@ class Config:
 
     Normalization does not affect continuous angle accumulation across arcs --
     see :func:`_advance`, which never constructs a ``Config``.
+
+    Equality/hashing rely on ``theta`` staying strictly below ``2*pi`` after
+    normalization; see the edge-case guard in :func:`angles.normalize`.
     """
 
     x: float
@@ -91,8 +94,12 @@ class Config:
         Positions and headings must each differ by strictly less than *tol*
         (a difference of exactly *tol* is not approx-equal); the heading is
         compared as the shortest arc on the circle, so headings straddling
-        the ``0``/``2*pi`` seam are not spuriously far apart.
+        the ``0``/``2*pi`` seam are not spuriously far apart. *tol* applies
+        uniformly to both position (meters) and heading (radians) -- a value
+        meaningful for one is not automatically meaningful for the other.
         """
+        if tol <= 0:
+            raise ValueError(f"tol must be positive, got tol={tol!r}")
         dtheta = abs(self.theta - other.theta)
         dtheta = min(dtheta, math.tau - dtheta)  # shortest arc across the seam
         return abs(self.x - other.x) < tol and abs(self.y - other.y) < tol and dtheta < tol

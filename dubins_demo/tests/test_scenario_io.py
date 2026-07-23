@@ -78,24 +78,37 @@ def test_json_round_trip_restores_all_fields(tmp_path: Path) -> None:
     assert loaded.angle_unit is Unit.RAD
 
 
-def test_round_trip_persists_normalized_theta(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("raw", "wraps"),
+    [
+        (7.0, -1),  # 7.0 rad wraps down to 7.0 - 2*pi ~= 0.7168 (positive overflow)
+        (-1.0, 1),  # -1.0 rad wraps up to -1.0 + 2*pi ~= 5.2832 (negative underflow)
+    ],
+    ids=["positive_overflow", "negative_underflow"],
+)
+def test_round_trip_persists_normalized_theta(tmp_path: Path, raw: float, wraps: int) -> None:
     # Config normalizes theta to [0, 2*pi) on construction, so what is saved --
     # and hence what round-trips -- is the normalized heading, not the raw input.
     # A scenario built from an out-of-range theta must therefore save the
     # normalized value and reload identically (idempotent under a second solve).
-    raw = 7.0  # 7.0 rad wraps to 7.0 - 2*pi ~= 0.7168
+    # Both directions of overflow are covered here: a positive raw that wraps
+    # down and a negative raw that wraps up. ``_config_from_dict`` rebuilds
+    # ``Config`` straight from raw JSON floats and leans on ``__post_init__``
+    # normalization for both, so a sign-specific regression in that path would
+    # only show up on one of the two parametrizations.
+    expected = raw + wraps * 2.0 * math.pi
     scenario = Scenario(
         start=Config(0.0, 0.0, raw),
         goal=Config(10.0, 5.0, 0.0),
         radius_policy=FixedRadius(2.0),
     )
-    assert scenario.start.theta == pytest.approx(raw - 2.0 * math.pi)
+    assert scenario.start.theta == pytest.approx(expected)
 
     target = tmp_path / "scenario.json"
     save_scenario(scenario, target)
 
     data = json.loads(target.read_text(encoding="utf-8"))
-    assert data["start"]["theta"] == pytest.approx(raw - 2.0 * math.pi)
+    assert data["start"]["theta"] == pytest.approx(expected)
 
     loaded = load_scenario(target)
     # Exact, not approx: JSON round-trips the float64 bits exactly (see the

@@ -470,6 +470,14 @@ def test_config_equality_y_only_difference() -> None:
     assert Config(1.0, 2.0, 0.5) != Config(1.0, 2.5, 0.5)
 
 
+def test_config_equality_theta_only_difference() -> None:
+    # Every other theta-inequality case above also varies x or y, or differs
+    # by an exact 2*pi multiple (which is actually equal) -- this is the only
+    # test proving theta alone participates in == (and, transitively, hash).
+    assert Config(1.0, 2.0, 0.5) == Config(1.0, 2.0, 0.5)
+    assert Config(1.0, 2.0, 0.5) != Config(1.0, 2.0, 0.6)
+
+
 def test_config_equality_is_transitive() -> None:
     # An absolute-eps tolerant __eq__ would be intransitive: a within eps of b,
     # and b within eps of c, yet a and c sit just over eps apart (using
@@ -526,7 +534,43 @@ def test_config_approx_boundary_at_exact_tolerance() -> None:
     # tol is a strict (exclusive) bound: a gap of exactly tol is not approx.
     a = Config(0.0, 0.0, 0.0)
     assert not a.approx(Config(1e-6, 0.0, 0.0), tol=1e-6)
+    assert not a.approx(Config(0.0, 1e-6, 0.0), tol=1e-6)
     assert not a.approx(Config(0.0, 0.0, 1e-6), tol=1e-6)
+
+
+def test_config_approx_rejects_non_positive_tolerance() -> None:
+    # Mirrors the construction-time finiteness guard: a non-positive tol
+    # would silently produce meaningless always-false/always-true
+    # comparisons rather than fail loudly, so it must raise instead.
+    a, b = Config(0.0, 0.0, 0.0), Config(0.0, 0.0, 0.0)
+    with pytest.raises(ValueError, match="tol"):
+        a.approx(b, tol=0)
+    with pytest.raises(ValueError, match="tol"):
+        a.approx(b, tol=-1e-6)
+
+
+def test_config_approx_x_only_difference() -> None:
+    # y and theta held fixed: isolates x so a passing test genuinely proves
+    # x participates in approx, not just the combined distance in test_config_
+    # approx_is_approximate.
+    a = Config(0.0, 1.0, 0.5)
+    assert a.approx(Config(1e-12, 1.0, 0.5))
+    assert not a.approx(Config(1e-3, 1.0, 0.5))
+
+
+def test_config_approx_y_only_difference() -> None:
+    a = Config(1.0, 0.0, 0.5)
+    assert a.approx(Config(1.0, 1e-12, 0.5))
+    assert not a.approx(Config(1.0, 1e-3, 0.5))
+
+
+def test_config_approx_theta_only_difference() -> None:
+    # An ordinary theta away from the 0/2*pi seam, so this proves per-axis
+    # isolation rather than the seam-wraparound behavior already covered by
+    # test_config_approx_theta_seam and the seam-parametrized tests below.
+    a = Config(1.0, 2.0, math.pi)
+    assert a.approx(Config(1.0, 2.0, math.pi + 1e-12))
+    assert not a.approx(Config(1.0, 2.0, math.pi + 1e-3))
 
 
 def test_config_approx_theta_seam() -> None:
