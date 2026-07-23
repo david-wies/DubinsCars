@@ -97,6 +97,10 @@ class Config:
         the ``0``/``2*pi`` seam are not spuriously far apart. *tol* applies
         uniformly to both position (meters) and heading (radians) -- a value
         meaningful for one is not automatically meaningful for the other.
+
+        Not transitive: ``a.approx(b)`` and ``b.approx(c)`` do not imply
+        ``a.approx(c)``. Do not chain calls to build equivalence classes
+        (e.g. deduplicating a list of near-identical poses).
         """
         if tol <= 0:
             raise ValueError(f"tol must be positive, got tol={tol!r}")
